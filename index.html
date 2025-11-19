@@ -24,6 +24,20 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .cursor-grab { cursor: grab; }
         .cursor-grabbing { cursor: grabbing; }
+        
+        /* Slider Styling - Spectrum Gradient */
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #fff; border: 2px solid #64748b; cursor: pointer; margin-top: -8px; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 6px; cursor: pointer; 
+            /* Blue -> Green -> Yellow -> Orange -> Red */
+            background: linear-gradient(to right, #2563eb, #10b981, #eab308, #f97316, #dc2626); 
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -35,8 +49,7 @@
         // ==========================================
         // 重要：請在此處填入您的 Firebase Config
         // ==========================================
-        // 如果您之前已經填寫過，請務必將那段 Config 複製回來這裡取代空物件
-const firebaseConfig = {
+      const firebaseConfig = {
   apiKey: "AIzaSyCRaOhX4vCcsKLCFtUfFw0B1Ce2NnHF0mA",
   authDomain: "political-actor-mapping.firebaseapp.com",
   projectId: "political-actor-mapping",
@@ -46,7 +59,7 @@ const firebaseConfig = {
   measurementId: "G-H6B9N45HJ1"
 };
 
-        // 初始化 Firebase
+
         if (!firebase.apps.length && firebaseConfig.apiKey) {
             try {
                 firebase.initializeApp(firebaseConfig);
@@ -70,10 +83,25 @@ const firebaseConfig = {
             OTHER: { color: "#666666", label: "無黨/其他" },
         };
 
-        const RELATIONSHIPS = {
-            FRIENDLY: { id: 'FRIENDLY', label: '友好', color: '#10b981', width: 3, distance: 80, dashed: "0" },
-            HOSTILE: { id: 'HOSTILE', label: '敵對', color: '#ef4444', width: 2, distance: 220, dashed: "6,4" },
-            COOPERATIVE: { id: 'COOPERATIVE', label: '合作', color: '#3b82f6', width: 2, distance: 130, dashed: "0" }
+        // 10級關係光譜：藍 -> 綠 -> 黃 -> 橙 -> 紅
+        const RELATIONSHIP_LEVELS = {
+            '1': { label: '等級 1 (極度友好)', color: '#2563eb', distance: 60, width: 4, dashed: "0" },   // Blue
+            '2': { label: '等級 2 (非常友好)', color: '#0ea5e9', distance: 80, width: 3.5, dashed: "0" }, // Sky
+            '3': { label: '等級 3 (友好)',    color: '#10b981', distance: 100, width: 3, dashed: "0" },   // Emerald
+            '4': { label: '等級 4 (微友好)',  color: '#84cc16', distance: 120, width: 2.5, dashed: "0" }, // Lime
+            '5': { label: '等級 5 (中立/競合)', color: '#eab308', distance: 140, width: 2, dashed: "0" },   // Yellow
+            '6': { label: '等級 6 (微敵對)',  color: '#f59e0b', distance: 160, width: 2, dashed: "0" },   // Amber
+            '7': { label: '等級 7 (敵對)',    color: '#f97316', distance: 190, width: 2.5, dashed: "0" }, // Orange
+            '8': { label: '等級 8 (非常敵對)', color: '#ea580c', distance: 220, width: 3, dashed: "0" },   // Dark Orange
+            '9': { label: '等級 9 (極度敵對)', color: '#dc2626', distance: 260, width: 3.5, dashed: "6,4" },// Red
+            '10':{ label: '等級 10 (世仇)',   color: '#7f1d1d', distance: 300, width: 4, dashed: "4,4" }  // Dark Red
+        };
+
+        // 舊資料相容對照表
+        const LEGACY_MAPPING = {
+            'FRIENDLY': '2',
+            'COOPERATIVE': '5',
+            'HOSTILE': '8'
         };
 
         const INITIAL_DATA = {
@@ -88,15 +116,15 @@ const firebaseConfig = {
                 { tempId: 8, name: "王世堅", party: "DPP", x: -50, y: 150 },
             ],
             links: [
-                { source: 1, target: 2, type: "FRIENDLY" },
-                { source: 1, target: 5, type: "COOPERATIVE" },
-                { source: 1, target: 3, type: "HOSTILE" },
-                { source: 1, target: 4, type: "HOSTILE" },
-                { source: 4, target: 6, type: "FRIENDLY" },
-                { source: 3, target: 7, type: "COOPERATIVE" },
-                { source: 3, target: 4, type: "COOPERATIVE" },
-                { source: 4, target: 8, type: "HOSTILE" },
-                { source: 1, target: 8, type: "COOPERATIVE" },
+                { source: 1, target: 2, type: "1", reason: "長期政治盟友" }, 
+                { source: 1, target: 5, type: "2", reason: "黨內合作" }, 
+                { source: 1, target: 3, type: "8", reason: "政黨立場對立" }, 
+                { source: 1, target: 4, type: "9", reason: "多次公開交鋒" }, 
+                { source: 4, target: 6, type: "2", reason: "議題合作" }, 
+                { source: 3, target: 7, type: "3", reason: "同黨互助" }, 
+                { source: 3, target: 4, type: "5", reason: "立院議題競合" }, 
+                { source: 4, target: 8, type: "10", reason: "多年宿怨" },
+                { source: 1, target: 8, type: "3", reason: "同黨同志" }, 
             ]
         };
 
@@ -120,8 +148,8 @@ const firebaseConfig = {
             Move: (p) => <Icon {...p} d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M9 19l3 3 3 3M2 12h20M12 2v20" />,
             Star: (p) => <Icon {...p} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
             Alert: (p) => <Icon {...p} d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01" />,
-            // 修正: 合併兩個 path 字串到一個 d 屬性中，避免 JSX 語法錯誤
-            Edit: (p) => <Icon {...p} d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            Edit: (p) => <Icon {...p} d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />,
+            Message: (p) => <Icon {...p} d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         };
 
         function App() {
@@ -148,7 +176,8 @@ const firebaseConfig = {
             const [newParty, setNewParty] = useState("DPP");
             const [linkSource, setLinkSource] = useState("");
             const [linkTarget, setLinkTarget] = useState("");
-            const [linkType, setLinkType] = useState("COOPERATIVE");
+            const [linkType, setLinkType] = useState("5"); // 預設中立
+            const [linkReason, setLinkReason] = useState(""); // 新增：變更原因
 
             const svgRef = useRef(null);
             const draggingRef = useRef(null);
@@ -188,7 +217,7 @@ const firebaseConfig = {
                     });
                     INITIAL_DATA.links.forEach(l => {
                         const docRef = linksRef.doc();
-                        batch.set(docRef, { source: idMap[l.source], target: idMap[l.target], type: l.type, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        batch.set(docRef, { source: idMap[l.source], target: idMap[l.target], type: l.type, reason: l.reason || "", createdAt: firebase.firestore.FieldValue.serverTimestamp() });
                     });
                     await batch.commit();
                     console.log("Auto-seed completed");
@@ -218,8 +247,7 @@ const firebaseConfig = {
                 return () => { unsubscribeNodes(); unsubscribeLinks(); };
             }, [user]);
 
-            // --- Existing Link Detection & Auto-fill ---
-            // 計算目前選取的兩個人物之間是否存在連結
+            // --- Existing Link Detection ---
             const existingLink = useMemo(() => {
                 if (!linkSource || !linkTarget || linkSource === linkTarget) return null;
                 return links.find(l => 
@@ -228,16 +256,15 @@ const firebaseConfig = {
                 );
             }, [linkSource, linkTarget, links]);
 
-            // 當偵測到既有連結時，自動將選單切換到該連結的關係類型
             useEffect(() => {
                 if (existingLink) {
-                    setLinkType(existingLink.type);
+                    const type = LEGACY_MAPPING[existingLink.type] || existingLink.type || "5";
+                    setLinkType(type);
+                    setLinkReason(existingLink.reason || ""); // 載入現有原因
                 } else {
-                    // 如果切換到沒有連結的組合，可以重置為預設值，或保留上次選擇，這裡選擇重置為合作以示區別
-                    // setLinkType("COOPERATIVE"); 
+                    setLinkReason(""); // 重置
                 }
             }, [existingLink]);
-
 
             // --- Physics ---
             useEffect(() => {
@@ -273,7 +300,8 @@ const firebaseConfig = {
                             const sIdx = newNodes.findIndex(n => n.id === link.source);
                             const tIdx = newNodes.findIndex(n => n.id === link.target);
                             if (sIdx !== -1 && tIdx !== -1) {
-                                const rel = RELATIONSHIPS[link.type] || RELATIONSHIPS.COOPERATIVE;
+                                const typeKey = LEGACY_MAPPING[link.type] || link.type || "5";
+                                const rel = RELATIONSHIP_LEVELS[typeKey] || RELATIONSHIP_LEVELS["5"];
                                 const dx = newNodes[tIdx].x - newNodes[sIdx].x;
                                 const dy = newNodes[tIdx].y - newNodes[sIdx].y;
                                 const dist = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -320,35 +348,25 @@ const firebaseConfig = {
                     });
                     if (linkSource) {
                         await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links').add({
-                            source: linkSource, target: docRef.id, type: linkType, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                            source: linkSource, target: docRef.id, type: linkType, reason: linkReason, createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                     }
-                    setNewName(""); setLinkSource(docRef.id);
+                    setNewName(""); setLinkSource(docRef.id); setLinkReason("");
                     if (window.innerWidth < 768) setLeftSidebarOpen(false);
                 } catch (err) { console.error(err); alert("新增失敗: " + err.message); }
             };
 
-            // Unified Handle for Create / Update Link
             const handleSaveLink = async (e) => {
                 e.preventDefault();
                 if (!linkSource || !linkTarget || linkSource === linkTarget) { alert("請選擇兩個不同的人物"); return; }
-                
                 const linksRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links');
-
                 try {
                     if (existingLink) {
-                        // 更新現有連結
-                        await linksRef.doc(existingLink.id).update({
-                            type: linkType,
-                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
+                        await linksRef.doc(existingLink.id).update({ type: linkType, reason: linkReason, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
                     } else {
-                        // 建立新連結
-                        await linksRef.add({
-                            source: linkSource, target: linkTarget, type: linkType, 
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
+                        await linksRef.add({ source: linkSource, target: linkTarget, type: linkType, reason: linkReason, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
                     }
+                    setLinkReason("");
                     if (window.innerWidth < 768) setLeftSidebarOpen(false);
                 } catch (err) { console.error(err); alert("操作失敗: " + err.message); }
             };
@@ -438,6 +456,8 @@ const firebaseConfig = {
                 );
             }
 
+            const currentRelLevel = RELATIONSHIP_LEVELS[linkType] || RELATIONSHIP_LEVELS['5'];
+
             return (
                 <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-800">
                     {/* Left Sidebar */}
@@ -464,7 +484,18 @@ const firebaseConfig = {
                                         <div className="p-3 bg-blue-50 rounded border border-blue-100">
                                             <label className="text-xs font-bold text-blue-800 mb-1 block">初始連結對象</label>
                                             <select value={linkSource} onChange={e => setLinkSource(e.target.value)} className="w-full p-3 sm:p-2 mb-3 rounded border border-blue-200 text-base sm:text-sm"><option value="" disabled>-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select>
-                                            <div className="flex gap-1">{Object.values(RELATIONSHIPS).map(r => (<button type="button" key={r.id} onClick={() => setLinkType(r.id)} className={`flex-1 py-2 text-[10px] rounded border ${linkType === r.id ? 'text-white' : 'bg-white'}`} style={{ backgroundColor: linkType === r.id ? r.color : '#fff', borderColor: r.color, color: linkType === r.id ? '#fff' : r.color }}>{r.label}</button>))}</div>
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between">
+                                                    <span>關係光譜: <span style={{color: currentRelLevel.color}}>{currentRelLevel.label.split(' ')[1]}</span></span>
+                                                    <span style={{color: currentRelLevel.color}}>●</span>
+                                                </label>
+                                                <input type="range" min="1" max="10" value={linkType} onChange={e => setLinkType(e.target.value)} />
+                                                <div className="flex justify-between text-[10px] text-slate-400 mt-1"><span>藍(友)</span><span>綠</span><span>黃</span><span>橙</span><span>紅(敵)</span></div>
+                                            </div>
+                                            <div className="mt-3">
+                                                <label className="text-xs font-bold text-blue-800 mb-1 block">相關新聞 / 關係備註</label>
+                                                <textarea value={linkReason} onChange={e => setLinkReason(e.target.value)} placeholder="例如: 兩人曾在立法院激烈爭執..." className="w-full p-2 rounded border border-blue-200 text-xs h-16 outline-none resize-none"></textarea>
+                                            </div>
                                         </div>
                                     ) : <div className="p-3 bg-green-50 rounded border border-green-200 text-green-800 text-xs font-bold mb-2 flex items-center gap-2"><Icons.Star size={16} className="text-green-600"/><span>第一位核心人物</span></div>}
                                     <button type="submit" disabled={!newName.trim() || (nodes.length > 0 && !linkSource)} className="w-full py-3 bg-blue-600 text-white rounded shadow hover:bg-blue-700 disabled:opacity-50 font-bold text-base">{nodes.length === 0 ? "建立起點" : "加入網絡"}</button>
@@ -483,9 +514,16 @@ const firebaseConfig = {
                                             )}
                                             <div><label className="text-xs font-bold text-slate-500 mb-1 block">人物 A</label><select value={linkSource} onChange={e => setLinkSource(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-slate-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkTarget}>{n.name}</option>)}</select></div>
                                             <div><label className="text-xs font-bold text-slate-500 mb-1 block">人物 B</label><select value={linkTarget} onChange={e => setLinkTarget(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-slate-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkSource}>{n.name}</option>)}</select></div>
+                                            <div className="pt-2">
+                                                <label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between">
+                                                    <span>關係光譜: <span style={{color: currentRelLevel.color}}>{currentRelLevel.label.split(' ')[1]}</span></span>
+                                                </label>
+                                                <input type="range" min="1" max="10" value={linkType} onChange={e => setLinkType(e.target.value)} />
+                                                <div className="flex justify-between text-[10px] text-slate-400 mt-1"><span>藍(友)</span><span>綠</span><span>黃</span><span>橙</span><span>紅(敵)</span></div>
+                                            </div>
                                             <div>
-                                                <label className="text-xs font-bold text-slate-500 mb-1 block">關係性質</label>
-                                                <div className="flex gap-1">{Object.values(RELATIONSHIPS).map(r => (<button type="button" key={r.id} onClick={() => setLinkType(r.id)} className={`flex-1 py-2 text-[10px] rounded border ${linkType === r.id ? 'text-white' : 'bg-white'}`} style={{ backgroundColor: linkType === r.id ? r.color : '#fff', borderColor: r.color, color: linkType === r.id ? '#fff' : r.color }}>{r.label}</button>))}</div>
+                                                <label className="text-xs font-bold text-slate-500 mb-1 block">變更原因 / 相關新聞</label>
+                                                <textarea value={linkReason} onChange={e => setLinkReason(e.target.value)} placeholder="紀錄變更原因..." className="w-full p-2 rounded border border-slate-200 text-xs h-16 outline-none resize-none"></textarea>
                                             </div>
                                         </div>
                                     )}
@@ -506,13 +544,46 @@ const firebaseConfig = {
 
                             {selectedNodeId && nodes.find(n => n.id === selectedNodeId) && (
                                 <div className="border-t pt-4 mt-4 pb-20 sm:pb-0">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <h3 className="font-bold text-sm text-slate-600">選取資訊</h3>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="font-bold text-sm text-slate-600">選取資訊與連結紀錄</h3>
                                         <button onClick={() => handleDeleteNode(selectedNodeId)} className="text-red-500 p-2 bg-red-50 rounded-full hover:bg-red-100"><Icons.Trash size={20}/></button>
                                     </div>
-                                    <div className="p-4 bg-white rounded border shadow-sm">
-                                        <div className="text-xl font-bold mb-1">{nodes.find(n => n.id === selectedNodeId).name}</div>
-                                        <div className="text-xs bg-slate-100 p-2 rounded">連結數: {links.filter(l => l.source === selectedNodeId || l.target === selectedNodeId).length}</div>
+                                    
+                                    <div className="space-y-3">
+                                        <div className="p-3 bg-white rounded border border-slate-200 shadow-sm">
+                                            <div className="text-xl font-bold mb-1">{nodes.find(n => n.id === selectedNodeId).name}</div>
+                                            <div className="text-xs text-slate-400">ID: {selectedNodeId}</div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <h4 className="text-xs font-bold text-slate-400 uppercase">連結列表</h4>
+                                            {links.filter(l => l.source === selectedNodeId || l.target === selectedNodeId).map(link => {
+                                                const isSource = link.source === selectedNodeId;
+                                                const otherId = isSource ? link.target : link.source;
+                                                const otherNode = nodes.find(n => n.id === otherId);
+                                                const typeKey = LEGACY_MAPPING[link.type] || link.type || "5";
+                                                const rel = RELATIONSHIP_LEVELS[typeKey] || RELATIONSHIP_LEVELS["5"];
+                                                if (!otherNode) return null;
+
+                                                return (
+                                                    <div key={link.id} className="p-2 bg-white rounded border border-slate-100 text-xs flex flex-col gap-1 shadow-sm">
+                                                        <div className="flex justify-between items-center font-bold">
+                                                            <span>{otherNode.name}</span>
+                                                            <span style={{color: rel.color}}>{rel.label.split(' ')[1]}</span>
+                                                        </div>
+                                                        {link.reason && (
+                                                            <div className="text-slate-500 bg-slate-50 p-1.5 rounded mt-1 flex gap-1 items-start">
+                                                                <Icons.Message size={12} className="mt-0.5 shrink-0 opacity-50"/>
+                                                                <span className="leading-tight">{link.reason}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                            {links.filter(l => l.source === selectedNodeId || l.target === selectedNodeId).length === 0 && (
+                                                <div className="text-slate-400 text-xs italic">尚無連結</div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -561,8 +632,11 @@ const firebaseConfig = {
                                     const s = nodes.find(n => n.id === link.source);
                                     const t = nodes.find(n => n.id === link.target);
                                     if (!s || !t) return null;
-                                    const rel = RELATIONSHIPS[link.type] || RELATIONSHIPS.COOPERATIVE;
-                                    return <line key={link.id} x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke={rel.color} strokeWidth={rel.width} strokeDasharray={rel.dashed} strokeOpacity={0.6} />;
+                                    
+                                    const typeKey = LEGACY_MAPPING[link.type] || link.type || "5";
+                                    const rel = RELATIONSHIP_LEVELS[typeKey] || RELATIONSHIP_LEVELS["5"];
+                                    
+                                    return <line key={link.id} x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke={rel.color} strokeWidth={rel.width} strokeDasharray={rel.dashed} strokeOpacity={0.7} />;
                                 })}
                                 {nodes.map(node => (
                                     <g key={node.id} transform={`translate(${node.x}, ${node.y})`} onMouseDown={e => handleMouseDown(e, node)} onTouchStart={e => handleTouchStartNode(e, node)} className="transition-opacity cursor-pointer">
