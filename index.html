@@ -20,8 +20,10 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); }
-        .fade-in { animation: fadeIn 0.5s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-20px) translateX(-50%); } to { opacity: 1; transform: translateY(0) translateX(-50%); } }
         .cursor-grab { cursor: grab; }
         .cursor-grabbing { cursor: grabbing; }
         
@@ -34,7 +36,6 @@
         }
         input[type=range]::-webkit-slider-runnable-track {
             width: 100%; height: 6px; cursor: pointer; 
-            /* Blue -> Green -> Yellow -> Orange -> Red */
             background: linear-gradient(to right, #2563eb, #10b981, #eab308, #f97316, #dc2626); 
             border-radius: 4px;
         }
@@ -49,7 +50,7 @@
         // ==========================================
         // 重要：請在此處填入您的 Firebase Config
         // ==========================================
-      const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyCRaOhX4vCcsKLCFtUfFw0B1Ce2NnHF0mA",
   authDomain: "political-actor-mapping.firebaseapp.com",
   projectId: "political-actor-mapping",
@@ -59,13 +60,11 @@
   measurementId: "G-H6B9N45HJ1"
 };
 
-
         if (!firebase.apps.length && firebaseConfig.apiKey) {
             try {
                 firebase.initializeApp(firebaseConfig);
             } catch (e) {
                 console.error("Firebase init error", e);
-                alert("Firebase 初始化失敗: " + e.message);
             }
         } else if (!firebaseConfig.apiKey) {
             console.warn("Firebase Config is missing!");
@@ -77,32 +76,27 @@
 
         // --- Constants ---
         const PARTIES = {
-            DPP: { color: "#1B9431", label: "民進黨" },
-            KMT: { color: "#000095", label: "國民黨" },
-            TPP: { color: "#28C7C7", label: "民眾黨" },
-            OTHER: { color: "#666666", label: "無黨/其他" },
+            DPP: { color: "#1B9431", label: "民進黨", textColor: "#FFFFFF" },
+            KMT: { color: "#000095", label: "國民黨", textColor: "#FFFFFF" },
+            TPP: { color: "#28C7C7", label: "民眾黨", textColor: "#0f172a" },
+            OTHER: { color: "#666666", label: "無黨/其他", textColor: "#FFFFFF" },
         };
 
-        // 10級關係光譜：藍 -> 綠 -> 黃 -> 橙 -> 紅
+        // 10級關係光譜
         const RELATIONSHIP_LEVELS = {
-            '1': { label: '等級 1 (極度友好)', color: '#2563eb', distance: 60, width: 4, dashed: "0" },   // Blue
-            '2': { label: '等級 2 (非常友好)', color: '#0ea5e9', distance: 80, width: 3.5, dashed: "0" }, // Sky
-            '3': { label: '等級 3 (友好)',    color: '#10b981', distance: 100, width: 3, dashed: "0" },   // Emerald
-            '4': { label: '等級 4 (微友好)',  color: '#84cc16', distance: 120, width: 2.5, dashed: "0" }, // Lime
-            '5': { label: '等級 5 (中立/競合)', color: '#eab308', distance: 140, width: 2, dashed: "0" },   // Yellow
-            '6': { label: '等級 6 (微敵對)',  color: '#f59e0b', distance: 160, width: 2, dashed: "0" },   // Amber
-            '7': { label: '等級 7 (敵對)',    color: '#f97316', distance: 190, width: 2.5, dashed: "0" }, // Orange
-            '8': { label: '等級 8 (非常敵對)', color: '#ea580c', distance: 220, width: 3, dashed: "0" },   // Dark Orange
-            '9': { label: '等級 9 (極度敵對)', color: '#dc2626', distance: 260, width: 3.5, dashed: "6,4" },// Red
-            '10':{ label: '等級 10 (世仇)',   color: '#7f1d1d', distance: 300, width: 4, dashed: "4,4" }  // Dark Red
+            '1': { label: '極度友好', color: '#2563eb', distance: 60, width: 4, dashed: "0" },
+            '2': { label: '非常友好', color: '#0ea5e9', distance: 80, width: 3.5, dashed: "0" },
+            '3': { label: '友好',    color: '#10b981', distance: 100, width: 3, dashed: "0" },
+            '4': { label: '微友好',  color: '#84cc16', distance: 120, width: 2.5, dashed: "0" },
+            '5': { label: '中立/競合', color: '#eab308', distance: 140, width: 2, dashed: "0" },
+            '6': { label: '微敵對',  color: '#f59e0b', distance: 160, width: 2, dashed: "0" },
+            '7': { label: '敵對',    color: '#f97316', distance: 190, width: 2.5, dashed: "0" },
+            '8': { label: '非常敵對', color: '#ea580c', distance: 220, width: 3, dashed: "0" },
+            '9': { label: '極度敵對', color: '#dc2626', distance: 260, width: 3.5, dashed: "0" }, 
+            '10':{ label: '世仇',    color: '#7f1d1d', distance: 300, width: 4, dashed: "0" }
         };
 
-        // 舊資料相容對照表
-        const LEGACY_MAPPING = {
-            'FRIENDLY': '2',
-            'COOPERATIVE': '5',
-            'HOSTILE': '8'
-        };
+        const LEGACY_MAPPING = { 'FRIENDLY': '2', 'COOPERATIVE': '5', 'HOSTILE': '8' };
 
         const INITIAL_DATA = {
             nodes: [
@@ -149,59 +143,181 @@
             Star: (p) => <Icon {...p} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
             Alert: (p) => <Icon {...p} d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01" />,
             Edit: (p) => <Icon {...p} d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />,
-            Message: (p) => <Icon {...p} d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            Message: (p) => <Icon {...p} d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+            History: (p) => <Icon {...p} d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />,
+            ChevronDown: (p) => <Icon {...p} d="M6 9l6 6 6-6" />,
+            ArrowLeft: (p) => <Icon {...p} d="M19 12H5 M12 19l-7-7 7-7" />,
+            Eye: (p) => <Icon {...p} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />,
+            Users: (p) => <Icon {...p} d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" />,
+            InfoCircle: (p) => <Icon {...p} d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 16v-4M12 8h.01" />,
+            Lock: (p) => <Icon {...p} d="M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a7 7 0 0 0-14 0v2" />,
+            Unlock: (p) => <Icon {...p} d="M7 11V7a5 5 0 0 1 9.9-1 M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2" /> 
+        };
+
+        // --- Custom UI Components ---
+        const Notification = ({ message, type, onClose }) => (
+            <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-lg shadow-lg text-white text-sm font-bold flex items-center gap-2 slide-in ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-600' : 'bg-blue-600'}`}>
+                {type === 'error' && <Icons.Alert size={16}/>}
+                <span>{message}</span>
+                <button onClick={onClose} className="ml-2 opacity-80 hover:opacity-100"><Icons.X size={14}/></button>
+            </div>
+        );
+
+        // 新增：密碼輸入視窗 (取代 prompt) - 修正 Placeholder
+        const PasswordModal = ({ onConfirm, onCancel }) => {
+            const [inputPwd, setInputPwd] = useState("");
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onConfirm(inputPwd);
+            };
+            return (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 fade-in">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 border border-slate-200">
+                        <h3 className="text-lg font-bold text-slate-800 mb-2">輸入管理員密碼</h3>
+                        <form onSubmit={handleSubmit}>
+                            <input 
+                                type="password" 
+                                value={inputPwd} 
+                                onChange={e => setInputPwd(e.target.value)} 
+                                className="w-full p-2 border border-slate-300 rounded mb-4 outline-none focus:ring-2 focus:ring-blue-500" 
+                                placeholder="請輸入密碼"
+                                autoFocus
+                            />
+                            <div className="flex gap-3">
+                                <button type="button" onClick={onCancel} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-bold text-sm transition-colors">取消</button>
+                                <button type="submit" className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors">解鎖</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const ConfirmModal = ({ message, onConfirm, onCancel }) => (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 fade-in">
+                <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 border border-slate-200">
+                    <h3 className="text-lg font-bold text-slate-800 mb-2">確認操作</h3>
+                    <p className="text-slate-600 text-sm mb-6">{message}</p>
+                    <div className="flex gap-3">
+                        <button onClick={onCancel} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-bold text-sm transition-colors">取消</button>
+                        <button onClick={onConfirm} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm transition-colors shadow-lg shadow-red-200">確定執行</button>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const WelcomeModal = ({ onComplete }) => {
+            const [tempNickname, setTempNickname] = useState("");
+            const handleSubmit = (e) => { e.preventDefault(); if (tempNickname.trim()) onComplete(tempNickname.trim()); };
+            return (
+                <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 border border-slate-200">
+                        <div className="text-center mb-6">
+                            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"><Icons.Star size={32} className="text-blue-600" /></div>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2">歡迎來到台灣政治網絡</h2>
+                            <p className="text-slate-600 text-sm leading-relaxed text-justify bg-slate-50 p-4 rounded-lg border border-slate-100">「即將轉職位的大叔國內政治官最後的逆襲，歡迎大家一起協作此國內政治的網絡，拓展我們對台灣政治的理解，解析其瘋狂、有趣及瞬息萬變。請善用備註，謝謝大家！」</p>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div><label className="block text-sm font-bold text-slate-700 mb-1">請輸入您的暱稱 (將顯示於變更紀錄中)</label><input type="text" value={tempNickname} onChange={(e) => setTempNickname(e.target.value)} placeholder="例: 鍵盤觀察家" className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-bold" autoFocus /></div>
+                            <button type="submit" disabled={!tempNickname.trim()} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-lg transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">開始協作</button>
+                        </form>
+                    </div>
+                </div>
+            );
         };
 
         function App() {
             const isConfigValid = useMemo(() => firebaseConfig && firebaseConfig.apiKey, []);
             const [user, setUser] = useState(null);
+            const [nickname, setNickname] = useState(localStorage.getItem("user_nickname") || "");
+            const [showWelcome, setShowWelcome] = useState(!localStorage.getItem("user_nickname"));
+            const [notification, setNotification] = useState(null);
+            const [confirmDialog, setConfirmDialog] = useState(null);
+            
+            // 新增：密碼視窗狀態
+            const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+            // Security State
+            const [isEditMode, setIsEditMode] = useState(false);
+
             const [nodes, setNodes] = useState([]);
             const [links, setLinks] = useState([]);
             const [loading, setLoading] = useState(true);
             
-            // UI State
             const isMobile = useMemo(() => window.innerWidth < 768, []);
             const [activeTab, setActiveTab] = useState('add_person');
             const [leftSidebarOpen, setLeftSidebarOpen] = useState(!isMobile);
             const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+            const [rightSidebarMode, setRightSidebarMode] = useState('LIST'); 
+            const [expandedHistoryId, setExpandedHistoryId] = useState(null);
             
             const [searchTerm, setSearchTerm] = useState("");
             const [scale, setScale] = useState(isMobile ? 0.6 : 1);
             const [offset, setOffset] = useState({ x: window.innerWidth/2, y: window.innerHeight/2 });
             const [isPanning, setIsPanning] = useState(false);
             const [selectedNodeId, setSelectedNodeId] = useState(null);
+            const [selectedLinkId, setSelectedLinkId] = useState(null);
+            const [viewCount, setViewCount] = useState(0);
 
-            // Form State
             const [newName, setNewName] = useState("");
             const [newParty, setNewParty] = useState("DPP");
             const [linkSource, setLinkSource] = useState("");
             const [linkTarget, setLinkTarget] = useState("");
-            const [linkType, setLinkType] = useState("5"); // 預設中立
-            const [linkReason, setLinkReason] = useState(""); // 新增：變更原因
+            const [linkType, setLinkType] = useState("5"); 
+            const [linkReason, setLinkReason] = useState(""); 
 
             const svgRef = useRef(null);
             const draggingRef = useRef(null);
             const panRef = useRef(null);
             const hasAutoSeededRef = useRef(false);
+            const hasViewCountedRef = useRef(false);
 
-            // --- Init Auth ---
+            const showNotification = (msg, type='info') => {
+                setNotification({ message: msg, type });
+                setTimeout(() => setNotification(null), 4000);
+            };
+            const handleNicknameSubmit = (name) => { setNickname(name); localStorage.setItem("user_nickname", name); setShowWelcome(false); };
+
+            // Toggle Security Mode (Updated)
+            const toggleEditMode = () => {
+                if (isEditMode) {
+                    setIsEditMode(false);
+                    showNotification("已切換至瀏覽模式 (唯讀)");
+                } else {
+                    setShowPasswordModal(true); // 開啟密碼視窗
+                }
+            };
+
+            // 驗證密碼
+            const handlePasswordSubmit = (pwd) => {
+                if (pwd === "0921") {
+                    setIsEditMode(true);
+                    showNotification("已啟用編輯模式", "success");
+                    setShowPasswordModal(false);
+                } else {
+                    showNotification("密碼錯誤", "error");
+                }
+            };
+
             useEffect(() => {
                 if (!isConfigValid) return;
                 const init = async () => {
                     try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await auth.signInWithCustomToken(__initial_auth_token);
-                        } else {
-                            await auth.signInAnonymously();
-                        }
-                    } catch (error) {
-                        console.error("Auth failed", error);
-                        alert("登入失敗: " + error.message);
-                    }
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { await auth.signInWithCustomToken(__initial_auth_token); } 
+                        else { await auth.signInAnonymously(); }
+                    } catch (error) { console.error("Auth error", error); showNotification("登入失敗: " + error.message, 'error'); }
                 };
                 init();
                 return auth.onAuthStateChanged(u => setUser(u));
             }, [isConfigValid]);
+
+            useEffect(() => {
+                if (!user || hasViewCountedRef.current) return;
+                hasViewCountedRef.current = true;
+                const metaRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('metadata').doc('stats');
+                metaRef.update({ viewCount: firebase.firestore.FieldValue.increment(1) }).catch(err => { if (err.code === 'not-found') metaRef.set({ viewCount: 1 }); });
+                return metaRef.onSnapshot(doc => { if (doc.exists) setViewCount(doc.data().viewCount || 0); });
+            }, [user]);
 
             const seedDatabase = async () => {
                 if (hasAutoSeededRef.current) return;
@@ -217,14 +333,13 @@
                     });
                     INITIAL_DATA.links.forEach(l => {
                         const docRef = linksRef.doc();
-                        batch.set(docRef, { source: idMap[l.source], target: idMap[l.target], type: l.type, reason: l.reason || "", createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        const initialHistory = [{ type: l.type, reason: l.reason || "初始資料", editor: "System", timestamp: new Date().toISOString() }];
+                        batch.set(docRef, { source: idMap[l.source], target: idMap[l.target], type: l.type, reason: l.reason || "", history: initialHistory, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
                     });
                     await batch.commit();
-                    console.log("Auto-seed completed");
-                } catch (err) { console.error("Auto-seed failed", err); }
+                } catch (err) { console.error(err); }
             };
 
-            // --- Listeners ---
             useEffect(() => {
                 if (!user) return;
                 const unsubscribeNodes = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_nodes')
@@ -237,43 +352,31 @@
                         }));
                         setLoading(false);
                         if (loadedNodes.length > 0 && !linkSource) setLinkSource(loadedNodes[0].id);
-                    }, err => { console.error(err); alert("讀取失敗: " + err.message); });
+                    }, err => { console.error(err); showNotification("資料讀取失敗，請檢查權限", 'error'); });
 
                 const unsubscribeLinks = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links')
-                    .onSnapshot(snapshot => {
-                         setLinks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                    });
-
+                    .onSnapshot(snapshot => setLinks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
                 return () => { unsubscribeNodes(); unsubscribeLinks(); };
             }, [user]);
 
-            // --- Existing Link Detection ---
             const existingLink = useMemo(() => {
                 if (!linkSource || !linkTarget || linkSource === linkTarget) return null;
-                return links.find(l => 
-                    (l.source === linkSource && l.target === linkTarget) || 
-                    (l.source === linkTarget && l.target === linkSource)
-                );
+                return links.find(l => (l.source === linkSource && l.target === linkTarget) || (l.source === linkTarget && l.target === linkSource));
             }, [linkSource, linkTarget, links]);
 
             useEffect(() => {
                 if (existingLink) {
-                    const type = LEGACY_MAPPING[existingLink.type] || existingLink.type || "5";
-                    setLinkType(type);
-                    setLinkReason(existingLink.reason || ""); // 載入現有原因
-                } else {
-                    setLinkReason(""); // 重置
-                }
+                    setLinkType(LEGACY_MAPPING[existingLink.type] || existingLink.type || "5");
+                    setLinkReason(existingLink.reason || "");
+                } else { setLinkReason(""); }
             }, [existingLink]);
 
-            // --- Physics ---
             useEffect(() => {
                 let animationFrameId;
                 const linkCounts = {};
                 links.forEach(l => { linkCounts[l.source] = (linkCounts[l.source]||0)+1; linkCounts[l.target] = (linkCounts[l.target]||0)+1; });
                 const maxLinks = Math.max(...Object.values(linkCounts), 1);
-                const MIN_RADIUS = 12; const MAX_RADIUS = 60;
-
+                const MIN_RADIUS = 20; const MAX_RADIUS = 80;
                 const step = () => {
                     setNodes(currentNodes => {
                         const newNodes = currentNodes.map(n => ({ ...n }));
@@ -289,7 +392,7 @@
                                 const dy = newNodes[i].y - newNodes[j].y;
                                 let distSq = dx * dx + dy * dy || 1;
                                 const dist = Math.sqrt(distSq);
-                                const force = 8000 / distSq;
+                                const force = 12000 / distSq;
                                 const fx = (dx / dist) * force;
                                 const fy = (dy / dist) * force;
                                 forces[i].fx += fx; forces[i].fy += fy;
@@ -332,13 +435,13 @@
                 return () => cancelAnimationFrame(animationFrameId);
             }, [links, nodes.length]);
 
-            // --- Actions ---
             const handleAddNode = async (e) => {
                 e.preventDefault();
+                if(!isEditMode) return; // Guard
                 if (!newName.trim() || !user) return;
-                if (nodes.length > 0 && !linkSource) { alert("請選擇連結對象"); return; }
+                if (nodes.length > 0 && !linkSource) { showNotification("請選擇連結對象", 'error'); return; }
                 const isDuplicate = nodes.some(n => n.name === newName.trim());
-                if (isDuplicate) { alert(`人物「${newName}」已存在！`); setActiveTab('add_link'); return; }
+                if (isDuplicate) { showNotification(`人物「${newName}」已存在！`, 'error'); setActiveTab('add_link'); return; }
                 try {
                     const sourceNode = nodes.find(n => n.id === linkSource);
                     const startX = sourceNode ? sourceNode.x + (Math.random()-0.5)*50 : 0;
@@ -347,40 +450,44 @@
                         name: newName.trim(), party: newParty, x: startX, y: startY, createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     if (linkSource) {
+                        const logEntry = { type: linkType, reason: linkReason, editor: nickname, timestamp: new Date().toISOString() };
                         await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links').add({
-                            source: linkSource, target: docRef.id, type: linkType, reason: linkReason, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                            source: linkSource, target: docRef.id, type: linkType, reason: linkReason, history: [logEntry], createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                     }
                     setNewName(""); setLinkSource(docRef.id); setLinkReason("");
                     if (window.innerWidth < 768) setLeftSidebarOpen(false);
-                } catch (err) { console.error(err); alert("新增失敗: " + err.message); }
+                    showNotification("人物新增成功");
+                } catch (err) { console.error(err); showNotification("新增失敗: " + err.message, 'error'); }
             };
 
             const handleSaveLink = async (e) => {
                 e.preventDefault();
-                if (!linkSource || !linkTarget || linkSource === linkTarget) { alert("請選擇兩個不同的人物"); return; }
+                if(!isEditMode) return; // Guard
+                if (!linkSource || !linkTarget || linkSource === linkTarget) { showNotification("請選擇兩個不同的人物", 'error'); return; }
                 const linksRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links');
+                const logEntry = { type: linkType, reason: linkReason, editor: nickname, timestamp: new Date().toISOString() };
                 try {
                     if (existingLink) {
-                        await linksRef.doc(existingLink.id).update({ type: linkType, reason: linkReason, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        await linksRef.doc(existingLink.id).update({ type: linkType, reason: linkReason, history: firebase.firestore.FieldValue.arrayUnion(logEntry), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        showNotification("關係更新成功");
                     } else {
-                        await linksRef.add({ source: linkSource, target: linkTarget, type: linkType, reason: linkReason, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        await linksRef.add({ source: linkSource, target: linkTarget, type: linkType, reason: linkReason, history: [logEntry], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+                        showNotification("連結建立成功");
                     }
                     setLinkReason("");
                     if (window.innerWidth < 768) setLeftSidebarOpen(false);
-                } catch (err) { console.error(err); alert("操作失敗: " + err.message); }
+                } catch (err) { console.error(err); showNotification("操作失敗: " + err.message, 'error'); }
             };
 
-            const handleDeleteLink = async () => {
-                if (!existingLink) return;
-                if (!confirm("確定要解除這段關係嗎？")) return;
-                try {
-                     await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links').doc(existingLink.id).delete();
-                } catch (err) { console.error(err); alert("刪除失敗: " + err.message); }
+            const deleteLinkAction = async () => {
+                if(!isEditMode) return; // Guard
+                try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links').doc(existingLink.id).delete(); setConfirmDialog(null); showNotification("連結已刪除"); } 
+                catch (err) { console.error(err); showNotification("刪除失敗: " + err.message, 'error'); }
             };
 
-            const handleDeleteNode = async (id) => {
-                if(!confirm("確定要刪除此人物？相關連結也會一併移除。")) return;
+            const deleteNodeAction = async (id) => {
+                if(!isEditMode) return; // Guard
                 try {
                     const batch = db.batch();
                     batch.delete(db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_nodes').doc(id));
@@ -389,13 +496,17 @@
                     });
                     await batch.commit();
                     setSelectedNodeId(null);
-                } catch (err) { console.error(err); alert("刪除失敗: " + err.message); }
+                    setRightSidebarOpen(false);
+                    setConfirmDialog(null);
+                    showNotification("人物已刪除");
+                } catch (err) { console.error(err); showNotification("刪除失敗: " + err.message, 'error'); }
             };
 
-            // --- Interactions ---
             const startDragNode = (id, clientX, clientY) => {
                 draggingRef.current = { id, startX: clientX, startY: clientY, nodeX: nodes.find(n => n.id === id).x, nodeY: nodes.find(n => n.id === id).y, x: nodes.find(n => n.id === id).x, y: nodes.find(n => n.id === id).y };
                 setSelectedNodeId(id);
+                setRightSidebarMode('DETAILS');
+                setRightSidebarOpen(true);
             };
             const startPanCanvas = (clientX, clientY) => {
                 setIsPanning(true);
@@ -405,6 +516,7 @@
             const handleCanvasMouseDown = (e) => { startPanCanvas(e.clientX, e.clientY); };
             const handleTouchStartNode = (e, node) => { e.stopPropagation(); const touch = e.touches[0]; startDragNode(node.id, touch.clientX, touch.clientY); };
             const handleCanvasTouchStart = (e) => { const touch = e.touches[0]; startPanCanvas(touch.clientX, touch.clientY); };
+            const handleLinkClick = (e, link) => { e.stopPropagation(); setSelectedLinkId(link.id); setSelectedNodeId(null); setRightSidebarMode('LINK_DETAILS'); setRightSidebarOpen(true); };
 
             useEffect(() => {
                 const handleMove = (clientX, clientY) => {
@@ -421,9 +533,12 @@
                 };
                 const handleUp = async () => {
                     if (draggingRef.current) {
-                        const { id, x, y } = draggingRef.current;
-                        if (id && !isNaN(x) && !isNaN(y)) {
-                            db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_nodes').doc(id).update({ x, y }).catch(console.error);
+                        // Only save position to DB if in Edit Mode
+                        if (isEditMode) {
+                            const { id, x, y } = draggingRef.current;
+                            if (id && !isNaN(x) && !isNaN(y)) {
+                                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_nodes').doc(id).update({ x, y }).catch(console.error);
+                            }
                         }
                         draggingRef.current = null;
                     }
@@ -437,188 +552,249 @@
                 window.addEventListener('mousemove', onMouseMove); window.addEventListener('mouseup', onMouseUp);
                 window.addEventListener('touchmove', onTouchMove); window.addEventListener('touchend', onTouchEnd);
                 return () => { window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', onTouchEnd); };
-            }, [scale, offset, nodes]);
+            }, [scale, offset, nodes, isEditMode]);
 
             const zoomIn = () => setScale(s => Math.min(s * 1.2, 5));
             const zoomOut = () => setScale(s => Math.max(s / 1.2, 0.1));
             const resetView = () => { setScale(isMobile ? 0.6 : 1); setOffset({ x: window.innerWidth/2, y: window.innerHeight/2 }); };
             const sortedNodes = useMemo(() => [...nodes].sort((a,b) => a.name.localeCompare(b.name)), [nodes]);
 
-            if (!isConfigValid) {
-                return (
-                    <div className="w-full h-screen flex items-center justify-center bg-red-50 p-5">
-                        <div className="max-w-md bg-white p-8 rounded-xl shadow-xl border border-red-200 text-center">
-                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"><Icons.Alert size={32} className="text-red-500" /></div>
-                            <h2 className="text-2xl font-bold text-red-800 mb-2">尚未設定資料庫連線</h2>
-                            <p className="text-gray-600 mb-6 text-sm leading-relaxed">請使用文字編輯器打開此 HTML 檔案，並填入您的 <code>const firebaseConfig</code>。</p>
-                        </div>
+            if (!isConfigValid) return (
+                <div className="w-full h-screen flex items-center justify-center bg-red-50 p-5">
+                    <div className="max-w-md bg-white p-8 rounded-xl shadow-xl border border-red-200 text-center">
+                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"><Icons.Alert size={32} className="text-red-500" /></div>
+                        <h2 className="text-2xl font-bold text-red-800 mb-2">尚未設定資料庫連線</h2>
+                        <p className="text-gray-600 mb-6 text-sm leading-relaxed">請使用文字編輯器打開此 HTML 檔案，並填入您的 <code>const firebaseConfig</code>。</p>
                     </div>
-                );
-            }
+                </div>
+            );
 
             const currentRelLevel = RELATIONSHIP_LEVELS[linkType] || RELATIONSHIP_LEVELS['5'];
 
             return (
                 <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-800">
-                    {/* Left Sidebar */}
+                    {notification && <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
+                    {confirmDialog && <ConfirmModal message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
+                    {showPasswordModal && <PasswordModal onConfirm={handlePasswordSubmit} onCancel={() => setShowPasswordModal(false)} />}
+                    {showWelcome && <WelcomeModal onComplete={handleNicknameSubmit} />}
+                    
+                    {/* Header / Left Sidebar */}
                     <div className={`absolute z-30 left-0 top-0 h-full shadow-2xl transition-transform duration-300 flex flex-col glass-panel border-r border-slate-200 w-full sm:w-80 ${leftSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                         <div className="p-4 bg-slate-800 text-white flex justify-between items-center shadow-md shrink-0">
                             <h1 className="font-bold text-lg flex items-center gap-2"><Icons.Cloud size={20}/> 雲端政壇觀測</h1>
-                            <div className="flex items-center gap-2">
-                                {loading && <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>}
-                                <button onClick={() => setLeftSidebarOpen(false)} className="hover:bg-slate-700 p-2 rounded"><Icons.X size={24}/></button>
+                            <div className="flex items-center gap-3">
+                                <button onClick={toggleEditMode} className={`p-1.5 rounded-lg transition-colors ${isEditMode ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`} title={isEditMode ? "目前為編輯模式 (點擊鎖定)" : "目前為唯讀模式 (點擊解鎖)"}>
+                                    {isEditMode ? <Icons.Unlock size={18}/> : <Icons.Lock size={18}/>}
+                                </button>
+                                <button onClick={() => setLeftSidebarOpen(false)} className="hover:bg-slate-700 p-1.5 rounded"><Icons.X size={24}/></button>
                             </div>
                         </div>
 
-                        <div className="flex p-2 gap-2 bg-slate-100 border-b border-slate-200 shrink-0">
-                            <button onClick={() => setActiveTab('add_person')} className={`flex-1 py-3 sm:py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${activeTab === 'add_person' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Icons.Plus size={16}/> 新增人物</button>
-                            <button onClick={() => setActiveTab('add_link')} className={`flex-1 py-3 sm:py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${activeTab === 'add_link' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Icons.Link size={16}/> 連結 / 編輯</button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6 pb-20 sm:pb-4">
-                            {activeTab === 'add_person' && (
-                                <form onSubmit={handleAddNode} className="space-y-4 fade-in">
-                                    <div><label className="text-xs font-bold text-slate-400 mb-1 block">新人物姓名</label><input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="例: 王世堅" className="w-full p-3 sm:p-2 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-base sm:text-sm" /></div>
-                                    <div><label className="text-xs font-bold text-slate-400 mb-1 block">所屬政黨</label><div className="grid grid-cols-2 gap-2">{Object.entries(PARTIES).map(([k, v]) => (<button type="button" key={k} onClick={() => setNewParty(k)} className={`text-xs py-2 px-2 rounded border ${newParty === k ? 'ring-2 ring-offset-1 font-bold' : 'opacity-70'}`} style={{ backgroundColor: newParty === k ? v.color : '#fff', color: newParty === k ? '#fff' : '#333', borderColor: v.color }}>{v.label}</button>))}</div></div>
-                                    {nodes.length > 0 ? (
-                                        <div className="p-3 bg-blue-50 rounded border border-blue-100">
-                                            <label className="text-xs font-bold text-blue-800 mb-1 block">初始連結對象</label>
-                                            <select value={linkSource} onChange={e => setLinkSource(e.target.value)} className="w-full p-3 sm:p-2 mb-3 rounded border border-blue-200 text-base sm:text-sm"><option value="" disabled>-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between">
-                                                    <span>關係光譜: <span style={{color: currentRelLevel.color}}>{currentRelLevel.label.split(' ')[1]}</span></span>
-                                                    <span style={{color: currentRelLevel.color}}>●</span>
-                                                </label>
-                                                <input type="range" min="1" max="10" value={linkType} onChange={e => setLinkType(e.target.value)} />
-                                                <div className="flex justify-between text-[10px] text-slate-400 mt-1"><span>藍(友)</span><span>綠</span><span>黃</span><span>橙</span><span>紅(敵)</span></div>
-                                            </div>
-                                            <div className="mt-3">
-                                                <label className="text-xs font-bold text-blue-800 mb-1 block">相關新聞 / 關係備註</label>
-                                                <textarea value={linkReason} onChange={e => setLinkReason(e.target.value)} placeholder="例如: 兩人曾在立法院激烈爭執..." className="w-full p-2 rounded border border-blue-200 text-xs h-16 outline-none resize-none"></textarea>
-                                            </div>
-                                        </div>
-                                    ) : <div className="p-3 bg-green-50 rounded border border-green-200 text-green-800 text-xs font-bold mb-2 flex items-center gap-2"><Icons.Star size={16} className="text-green-600"/><span>第一位核心人物</span></div>}
-                                    <button type="submit" disabled={!newName.trim() || (nodes.length > 0 && !linkSource)} className="w-full py-3 bg-blue-600 text-white rounded shadow hover:bg-blue-700 disabled:opacity-50 font-bold text-base">{nodes.length === 0 ? "建立起點" : "加入網絡"}</button>
-                                </form>
-                            )}
-
-                            {/* 連結 / 編輯 頁籤 */}
-                            {activeTab === 'add_link' && (
-                                <form onSubmit={handleSaveLink} className="space-y-4 fade-in">
-                                    {nodes.length < 2 ? <div className="p-4 text-center text-slate-400 text-xs">需至少兩位人物</div> : (
-                                        <div className={`p-4 rounded border space-y-3 transition-colors ${existingLink ? 'bg-amber-50 border-amber-200' : 'bg-purple-50 border-purple-100'}`}>
-                                            {existingLink && (
-                                                <div className="text-xs font-bold text-amber-600 flex items-center gap-2 mb-2 border-b border-amber-200 pb-2">
-                                                    <Icons.Edit size={14} /> 編輯現有關係
+                        {/* Controls / Forms - Only visible in Edit Mode or simplified view */}
+                        {!isEditMode ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 text-center space-y-4">
+                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center"><Icons.Lock size={32}/></div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-600">唯讀模式</h3>
+                                    <p className="text-xs mt-2">目前僅供瀏覽。如需新增人物或編輯關係，請點擊上方鎖頭解鎖。</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex p-2 gap-2 bg-slate-100 border-b border-slate-200 shrink-0">
+                                    <button onClick={() => setActiveTab('add_person')} className={`flex-1 py-3 sm:py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${activeTab === 'add_person' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Icons.Plus size={16}/> 新增人物</button>
+                                    <button onClick={() => setActiveTab('add_link')} className={`flex-1 py-3 sm:py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${activeTab === 'add_link' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Icons.Link size={16}/> 連結 / 編輯</button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6 pb-20 sm:pb-4">
+                                    {activeTab === 'add_person' && (
+                                        <form onSubmit={handleAddNode} className="space-y-4 fade-in">
+                                            <div><label className="text-xs font-bold text-slate-400 mb-1 block">新人物姓名</label><input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="例: 王世堅" className="w-full p-3 sm:p-2 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-base sm:text-sm" /></div>
+                                            <div><label className="text-xs font-bold text-slate-400 mb-1 block">所屬政黨</label><div className="grid grid-cols-2 gap-2">{Object.entries(PARTIES).map(([k, v]) => (<button type="button" key={k} onClick={() => setNewParty(k)} className={`text-xs py-2 px-2 rounded border ${newParty === k ? 'ring-2 ring-offset-1 font-bold' : 'opacity-70'}`} style={{ backgroundColor: newParty === k ? v.color : '#fff', color: newParty === k ? '#fff' : '#333', borderColor: v.color }}>{v.label}</button>))}</div></div>
+                                            {nodes.length > 0 ? (
+                                                <div className="p-3 bg-blue-50 rounded border border-blue-100">
+                                                    <label className="text-xs font-bold text-blue-800 mb-1 block">初始連結對象</label>
+                                                    <select value={linkSource} onChange={e => setLinkSource(e.target.value)} className="w-full p-3 sm:p-2 mb-3 rounded border border-blue-200 text-base sm:text-sm"><option value="" disabled>-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select>
+                                                    <div><label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between"><span>關係光譜: <span style={{color: currentRelLevel.color}}>{currentRelLevel.label}</span></span><span style={{color: currentRelLevel.color}}>●</span></label><input type="range" min="1" max="10" value={linkType} onChange={e => setLinkType(e.target.value)} /></div>
+                                                    <div className="mt-3"><label className="text-xs font-bold text-blue-800 mb-1 block">相關新聞 / 變更原因</label><textarea value={linkReason} onChange={e => setLinkReason(e.target.value)} placeholder="紀錄原因 (選填)..." className="w-full p-2 rounded border border-blue-200 text-xs h-16 outline-none resize-none"></textarea></div>
+                                                </div>
+                                            ) : <div className="p-3 bg-green-50 rounded border border-green-200 text-green-800 text-xs font-bold mb-2 flex items-center gap-2"><Icons.Star size={16} className="text-green-600"/><span>第一位核心人物</span></div>}
+                                            <button type="submit" disabled={!newName.trim() || (nodes.length > 0 && !linkSource)} className="w-full py-3 bg-blue-600 text-white rounded shadow hover:bg-blue-700 disabled:opacity-50 font-bold text-base">{nodes.length === 0 ? "建立起點" : "加入網絡"}</button>
+                                        </form>
+                                    )}
+                                    {activeTab === 'add_link' && (
+                                        <form onSubmit={handleSaveLink} className="space-y-4 fade-in">
+                                            {nodes.length < 2 ? <div className="p-4 text-center text-slate-400 text-xs">需至少兩位人物</div> : (
+                                                <div className={`p-4 rounded border space-y-3 transition-colors ${existingLink ? 'bg-amber-50 border-amber-200' : 'bg-purple-50 border-purple-100'}`}>
+                                                    {existingLink && <div className="text-xs font-bold text-amber-600 flex items-center gap-2 mb-2 border-b border-amber-200 pb-2"><Icons.Edit size={14} /> 編輯現有關係</div>}
+                                                    <div><label className="text-xs font-bold text-slate-500 mb-1 block">人物 A</label><select value={linkSource} onChange={e => setLinkSource(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-slate-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkTarget}>{n.name}</option>)}</select></div>
+                                                    <div><label className="text-xs font-bold text-slate-500 mb-1 block">人物 B</label><select value={linkTarget} onChange={e => setLinkTarget(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-slate-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkSource}>{n.name}</option>)}</select></div>
+                                                    <div className="pt-2"><label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between"><span>關係光譜: <span style={{color: currentRelLevel.color}}>{currentRelLevel.label}</span></span></label><input type="range" min="1" max="10" value={linkType} onChange={e => setLinkType(e.target.value)} /></div>
+                                                    <div><label className="text-xs font-bold text-slate-500 mb-1 block">變更原因 / 相關新聞</label><textarea value={linkReason} onChange={e => setLinkReason(e.target.value)} placeholder="紀錄變更原因 (選填)..." className="w-full p-2 rounded border border-slate-200 text-xs h-16 outline-none resize-none"></textarea></div>
                                                 </div>
                                             )}
-                                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">人物 A</label><select value={linkSource} onChange={e => setLinkSource(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-slate-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkTarget}>{n.name}</option>)}</select></div>
-                                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">人物 B</label><select value={linkTarget} onChange={e => setLinkTarget(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-slate-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkSource}>{n.name}</option>)}</select></div>
-                                            <div className="pt-2">
-                                                <label className="text-xs font-bold text-slate-500 mb-2 block flex justify-between">
-                                                    <span>關係光譜: <span style={{color: currentRelLevel.color}}>{currentRelLevel.label.split(' ')[1]}</span></span>
-                                                </label>
-                                                <input type="range" min="1" max="10" value={linkType} onChange={e => setLinkType(e.target.value)} />
-                                                <div className="flex justify-between text-[10px] text-slate-400 mt-1"><span>藍(友)</span><span>綠</span><span>黃</span><span>橙</span><span>紅(敵)</span></div>
+                                            <div className="flex gap-2">
+                                                {existingLink && <button type="button" onClick={() => setConfirmDialog({message: "確定要解除這段關係嗎？", onConfirm: deleteLinkAction})} className="flex-1 py-3 bg-red-100 text-red-600 hover:bg-red-200 rounded shadow font-bold text-base flex items-center justify-center gap-1"><Icons.Trash size={18}/> 刪除</button>}
+                                                <button type="submit" disabled={!linkSource || !linkTarget} className={`flex-[2] py-3 text-white rounded shadow font-bold text-base disabled:opacity-50 ${existingLink ? 'bg-amber-500 hover:bg-amber-600' : 'bg-purple-600 hover:bg-purple-700'}`}>{existingLink ? "更新關係" : "建立連結"}</button>
                                             </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-slate-500 mb-1 block">變更原因 / 相關新聞</label>
-                                                <textarea value={linkReason} onChange={e => setLinkReason(e.target.value)} placeholder="紀錄變更原因..." className="w-full p-2 rounded border border-slate-200 text-xs h-16 outline-none resize-none"></textarea>
-                                            </div>
-                                        </div>
+                                        </form>
                                     )}
-                                    
-                                    <div className="flex gap-2">
-                                        {existingLink && (
-                                            <button type="button" onClick={handleDeleteLink} className="flex-1 py-3 bg-red-100 text-red-600 hover:bg-red-200 rounded shadow font-bold text-base flex items-center justify-center gap-1">
-                                                <Icons.Trash size={18}/> 刪除
-                                            </button>
-                                        )}
-                                        <button type="submit" disabled={!linkSource || !linkTarget} 
-                                            className={`flex-[2] py-3 text-white rounded shadow font-bold text-base disabled:opacity-50 ${existingLink ? 'bg-amber-500 hover:bg-amber-600' : 'bg-purple-600 hover:bg-purple-700'}`}>
-                                            {existingLink ? "更新關係" : "建立連結"}
-                                        </button>
-                                    </div>
-                                </form>
-                            )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    {!leftSidebarOpen && <button onClick={() => { setLeftSidebarOpen(true); setRightSidebarOpen(false); }} className="absolute top-4 left-4 z-20 bg-white p-3 rounded shadow-lg border border-slate-100 active:bg-slate-100"><Icons.Menu size={24} /></button>}
+                    
+                    {/* Right Sidebar */}
+                    <div className={`absolute z-30 right-0 top-0 h-full shadow-xl transition-transform duration-300 flex flex-col glass-panel border-l border-slate-200 w-full sm:w-64 ${rightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                        <div className="p-3 bg-slate-800 text-white flex justify-between items-center shadow-sm shrink-0">
+                            <h2 className="font-bold text-sm flex items-center gap-2">
+                                {(selectedNodeId) ? <><Icons.Users size={16}/> 人物檔案與歷史</> : (selectedLinkId ? <><Icons.InfoCircle size={16}/> 關係詳情</> : <><Icons.List size={16}/> 人物名單 ({nodes.length})</>)}
+                            </h2>
+                            <button onClick={() => setRightSidebarOpen(false)} className="hover:bg-slate-700 p-2 rounded"><Icons.X size={24}/></button>
+                        </div>
 
-                            {selectedNodeId && nodes.find(n => n.id === selectedNodeId) && (
-                                <div className="border-t pt-4 mt-4 pb-20 sm:pb-0">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <h3 className="font-bold text-sm text-slate-600">選取資訊與連結紀錄</h3>
-                                        <button onClick={() => handleDeleteNode(selectedNodeId)} className="text-red-500 p-2 bg-red-50 rounded-full hover:bg-red-100"><Icons.Trash size={20}/></button>
-                                    </div>
-                                    
-                                    <div className="space-y-3">
-                                        <div className="p-3 bg-white rounded border border-slate-200 shadow-sm">
-                                            <div className="text-xl font-bold mb-1">{nodes.find(n => n.id === selectedNodeId).name}</div>
-                                            <div className="text-xs text-slate-400">ID: {selectedNodeId}</div>
+                        {selectedNodeId && (
+                            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4 pb-20">
+                                <button onClick={() => { setSelectedNodeId(null); }} className="text-blue-600 text-xs flex items-center gap-1 mb-2 hover:underline"><Icons.ArrowLeft size={12}/> 返回名單</button>
+                                {nodes.find(n => n.id === selectedNodeId) && (
+                                    <>
+                                        <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm text-center">
+                                            <div className="text-3xl font-bold mb-2 text-slate-800">{nodes.find(n => n.id === selectedNodeId).name}</div>
+                                            <span className="inline-block px-3 py-1 rounded-full text-white text-xs font-bold" style={{backgroundColor: PARTIES[nodes.find(n => n.id === selectedNodeId).party]?.color}}>{PARTIES[nodes.find(n => n.id === selectedNodeId).party]?.label}</span>
+                                            {isEditMode && (
+                                                <div className="mt-4 flex justify-center">
+                                                    <button onClick={() => setConfirmDialog({message: "確定要刪除此人物？相關連結也會一併移除。", onConfirm: () => deleteNodeAction(selectedNodeId)})} className="text-red-500 text-xs flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded"><Icons.Trash size={12}/> 刪除人物</button>
+                                                </div>
+                                            )}
                                         </div>
-
-                                        <div className="space-y-2">
-                                            <h4 className="text-xs font-bold text-slate-400 uppercase">連結列表</h4>
+                                        <div className="space-y-3">
+                                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b pb-1">連結關係與歷史</h4>
                                             {links.filter(l => l.source === selectedNodeId || l.target === selectedNodeId).map(link => {
                                                 const isSource = link.source === selectedNodeId;
-                                                const otherId = isSource ? link.target : link.source;
-                                                const otherNode = nodes.find(n => n.id === otherId);
+                                                const otherNode = nodes.find(n => n.id === (isSource ? link.target : link.source));
                                                 const typeKey = LEGACY_MAPPING[link.type] || link.type || "5";
                                                 const rel = RELATIONSHIP_LEVELS[typeKey] || RELATIONSHIP_LEVELS["5"];
                                                 if (!otherNode) return null;
-
                                                 return (
-                                                    <div key={link.id} className="p-2 bg-white rounded border border-slate-100 text-xs flex flex-col gap-1 shadow-sm">
-                                                        <div className="flex justify-between items-center font-bold">
-                                                            <span>{otherNode.name}</span>
-                                                            <span style={{color: rel.color}}>{rel.label.split(' ')[1]}</span>
+                                                    <div key={link.id} className="bg-white rounded-lg border border-slate-100 shadow-sm overflow-hidden">
+                                                        <div className="p-3 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => setExpandedHistoryId(expandedHistoryId === link.id ? null : link.id)}>
+                                                            <div className="font-bold text-sm flex items-center gap-2"><span>{otherNode.name}</span><span className="text-[10px] px-1.5 py-0.5 rounded-full text-white" style={{backgroundColor: rel.color}}>{rel.label}</span></div>
+                                                            <Icons.ChevronDown size={16} className={`text-slate-400 transition-transform ${expandedHistoryId === link.id ? 'rotate-180' : ''}`} />
                                                         </div>
-                                                        {link.reason && (
-                                                            <div className="text-slate-500 bg-slate-50 p-1.5 rounded mt-1 flex gap-1 items-start">
-                                                                <Icons.Message size={12} className="mt-0.5 shrink-0 opacity-50"/>
-                                                                <span className="leading-tight">{link.reason}</span>
+                                                        {expandedHistoryId === link.id && (
+                                                            <div className="bg-slate-50 p-3 text-xs border-t border-slate-100 animate-fade-in">
+                                                                <div className="mb-2 font-bold text-slate-500">目前狀態備註:</div>
+                                                                <div className="mb-3 p-2 bg-white rounded border border-slate-200 text-slate-700">{link.reason || "無備註"}</div>
+                                                                {link.history && link.history.length > 0 && (
+                                                                    <div className="space-y-3 mt-3 pt-3 border-t border-slate-200">
+                                                                        <div className="font-bold text-[10px] text-slate-400 uppercase">變更歷史</div>
+                                                                        {link.history.slice().reverse().map((h, idx) => (
+                                                                            <div key={idx} className="pl-3 border-l-2 border-slate-300 relative">
+                                                                                <div className="flex justify-between text-[10px] text-slate-400 mb-1"><span className="font-bold text-slate-600">{h.editor || "Unknown"}</span><span>{new Date(h.timestamp).toLocaleDateString()}</span></div>
+                                                                                <div className="text-slate-700"><span className="font-bold" style={{color: (RELATIONSHIP_LEVELS[h.type] || {}).color}}>[{(RELATIONSHIP_LEVELS[h.type] || {label: '未知'}).label}]</span> {h.reason}</div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
                                                 );
                                             })}
-                                            {links.filter(l => l.source === selectedNodeId || l.target === selectedNodeId).length === 0 && (
-                                                <div className="text-slate-400 text-xs italic">尚無連結</div>
-                                            )}
+                                            {links.filter(l => l.source === selectedNodeId || l.target === selectedNodeId).length === 0 && <div className="text-center text-slate-400 text-xs py-4">此人尚無連結</div>}
                                         </div>
-                                    </div>
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {selectedLinkId && !selectedNodeId && (
+                            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4 pb-20">
+                                <button onClick={() => { setSelectedLinkId(null); }} className="text-blue-600 text-xs flex items-center gap-1 mb-2 hover:underline"><Icons.ArrowLeft size={12}/> 返回名單</button>
+                                {(() => {
+                                    const link = links.find(l => l.id === selectedLinkId);
+                                    if (!link) return <div className="text-slate-400">連結已不存在</div>;
+                                    const sourceNode = nodes.find(n => n.id === link.source);
+                                    const targetNode = nodes.find(n => n.id === link.target);
+                                    const typeKey = LEGACY_MAPPING[link.type] || link.type || "5";
+                                    const rel = RELATIONSHIP_LEVELS[typeKey] || RELATIONSHIP_LEVELS["5"];
+                                    
+                                    return (
+                                        <>
+                                            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                                                <div className="flex items-center justify-center gap-3 mb-2">
+                                                    <div className="text-lg font-bold text-slate-700">{sourceNode?.name}</div>
+                                                    <div className="text-slate-300">↔</div>
+                                                    <div className="text-lg font-bold text-slate-700">{targetNode?.name}</div>
+                                                </div>
+                                                <div className="text-center">
+                                                    <span className="inline-block px-3 py-1 rounded-full text-white text-xs font-bold" style={{backgroundColor: rel.color}}>{rel.label}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-white rounded-lg border border-slate-100 shadow-sm p-4">
+                                                <div className="mb-2 font-bold text-slate-500 text-xs">目前狀態備註:</div>
+                                                <div className="p-2 bg-slate-50 rounded border border-slate-200 text-slate-700 text-sm">{link.reason || "無備註"}</div>
+                                                
+                                                {link.history && link.history.length > 0 && (
+                                                    <div className="space-y-3 mt-4 pt-3 border-t border-slate-200">
+                                                        <div className="font-bold text-[10px] text-slate-400 uppercase">變更歷史</div>
+                                                        {link.history.slice().reverse().map((h, idx) => (
+                                                            <div key={idx} className="pl-3 border-l-2 border-slate-300 relative">
+                                                                <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                                                                    <span className="font-bold text-slate-600">{h.editor || "Unknown"}</span>
+                                                                    <span>{new Date(h.timestamp).toLocaleDateString()}</span>
+                                                                </div>
+                                                                <div className="text-slate-700 text-xs">
+                                                                    <span className="font-bold" style={{color: (RELATIONSHIP_LEVELS[h.type] || {}).color}}>[{(RELATIONSHIP_LEVELS[h.type] || {label: '未知'}).label}]</span> {h.reason}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            {isEditMode && (
+                                                <div className="mt-4">
+                                                    <button onClick={() => { 
+                                                        setLinkSource(link.source); 
+                                                        setLinkTarget(link.target); 
+                                                        setActiveTab('add_link');
+                                                        setLeftSidebarOpen(true); 
+                                                        if(window.innerWidth < 768) setRightSidebarOpen(false);
+                                                    }} className="w-full py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded font-bold text-xs border border-blue-200 flex items-center justify-center gap-1">
+                                                        <Icons.Edit size={14}/> 編輯此關係
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        )}
+
+                        {!selectedNodeId && !selectedLinkId && (
+                            <div className="flex-1 flex flex-col h-full">
+                                <div className="p-2 border-b border-slate-200 bg-slate-50 shrink-0"><div className="relative"><Icons.Search size={18} className="absolute left-3 top-3 text-slate-400"/><input type="text" placeholder="搜尋姓名..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded border border-slate-300 text-sm focus:ring-1 focus:ring-blue-500 outline-none"/></div></div>
+                                <div className="flex-1 overflow-y-auto p-2 custom-scrollbar pb-20">
+                                    {Object.entries(PARTIES).map(([partyKey, partyInfo]) => {
+                                        const partyNodes = sortedNodes.filter(n => n.party === partyKey && n.name.includes(searchTerm));
+                                        if (partyNodes.length === 0) return null;
+                                        return (
+                                            <div key={partyKey} className="mb-4">
+                                                <h3 className="text-[10px] font-bold text-slate-500 mb-2 px-2 flex items-center gap-1 uppercase tracking-wider"><span className="w-2 h-2 rounded-full" style={{background: partyInfo.color}}></span>{partyInfo.label}</h3>
+                                                <div className="space-y-1">{partyNodes.map(node => (<div key={node.id} onClick={() => { setSelectedNodeId(node.id); setRightSidebarOpen(true); }} className={`px-3 py-2 rounded cursor-pointer flex items-center justify-between text-sm transition-colors hover:bg-slate-100 text-slate-700`}><span>{node.name}</span><span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400">{links.filter(l => l.source === node.id || l.target === node.id).length}</span></div>))}</div>
+                                            </div>
+                                        )
+                                    })}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {!leftSidebarOpen && <button onClick={() => { setLeftSidebarOpen(true); setRightSidebarOpen(false); }} className="absolute top-4 left-4 z-20 bg-white p-3 rounded shadow-lg border border-slate-100 active:bg-slate-100"><Icons.Menu size={24} /></button>}
-
-                    {/* Right Sidebar */}
-                    <div className={`absolute z-30 right-0 top-0 h-full shadow-xl transition-transform duration-300 flex flex-col glass-panel border-l border-slate-200 w-full sm:w-64 ${rightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-                        <div className="p-3 bg-slate-800 text-white flex justify-between items-center shadow-sm shrink-0">
-                            <h2 className="font-bold text-sm flex items-center gap-2"><Icons.List size={16}/> 人物名單 ({nodes.length})</h2>
-                            <button onClick={() => setRightSidebarOpen(false)} className="hover:bg-slate-700 p-2 rounded"><Icons.X size={24}/></button>
-                        </div>
-                        <div className="p-2 border-b border-slate-200 bg-slate-50 shrink-0"><div className="relative"><Icons.Search size={18} className="absolute left-3 top-3 text-slate-400"/><input type="text" placeholder="搜尋姓名..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-3 py-2 rounded border border-slate-300 text-sm focus:ring-1 focus:ring-blue-500 outline-none"/></div></div>
-                        <div className="flex-1 overflow-y-auto p-2 custom-scrollbar pb-20 sm:pb-2">
-                            {Object.entries(PARTIES).map(([partyKey, partyInfo]) => {
-                                const partyNodes = sortedNodes.filter(n => n.party === partyKey && n.name.includes(searchTerm));
-                                if (partyNodes.length === 0) return null;
-                                return (
-                                    <div key={partyKey} className="mb-4">
-                                        <h3 className="text-[10px] font-bold text-slate-500 mb-2 px-2 flex items-center gap-1 uppercase tracking-wider"><span className="w-2 h-2 rounded-full" style={{background: partyInfo.color}}></span>{partyInfo.label}</h3>
-                                        <div className="space-y-1">{partyNodes.map(node => (<div key={node.id} onClick={() => { setSelectedNodeId(node.id); if(window.innerWidth < 768) setRightSidebarOpen(false); }} className={`px-3 py-3 sm:py-1.5 rounded cursor-pointer flex items-center justify-between text-sm sm:text-xs transition-colors group border border-transparent ${selectedNodeId === node.id ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'hover:bg-slate-100 hover:border-slate-200 text-slate-700'}`}><span>{node.name}</span><span className={`text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 group-hover:bg-white group-hover:text-slate-500 ${selectedNodeId === node.id ? 'bg-white text-blue-400' : ''}`}>{links.filter(l => l.source === node.id || l.target === node.id).length}</span></div>))}</div>
-                                    </div>
-                                )
-                            })}
-                        </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Main Graph */}
-                    <div className={`flex-1 relative overflow-hidden bg-slate-50 transition-all duration-300 ${!isMobile && rightSidebarOpen ? 'mr-64' : 'mr-0'} ${!isMobile && leftSidebarOpen ? 'ml-80' : 'ml-0'} ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`} onMouseDown={handleCanvasMouseDown} onTouchStart={handleCanvasTouchStart}>
-                        <div className="absolute bottom-4 left-4 text-xs text-slate-400 pointer-events-none select-none z-10 hidden sm:block">{loading ? "Loading..." : `Live Sync • ${nodes.length} Nodes`}</div>
-                        <div className="absolute top-4 right-4 z-20 flex gap-2">
-                             {!rightSidebarOpen && <button onClick={() => { setRightSidebarOpen(true); setLeftSidebarOpen(false); }} className="bg-white p-3 rounded shadow-lg text-slate-600 active:bg-slate-100 flex items-center gap-1 text-xs font-bold"><Icons.List size={20}/> <span className="hidden sm:inline">名單</span></button>}
-                        </div>
+                    <div className={`flex-1 relative overflow-hidden bg-slate-50 transition-all duration-300 ${!isMobile && rightSidebarOpen ? 'mr-80' : 'mr-0'} ${!isMobile && leftSidebarOpen ? 'ml-80' : 'ml-0'} ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`} onMouseDown={handleCanvasMouseDown} onTouchStart={handleCanvasTouchStart}>
+                        <div className="absolute top-4 right-4 z-20 flex gap-2">{!rightSidebarOpen && <button onClick={() => { setRightSidebarOpen(true); setSelectedNodeId(null); setSelectedLinkId(null); }} className="bg-white p-3 rounded shadow-lg text-slate-600 active:bg-slate-100 flex items-center gap-1 text-xs font-bold"><Icons.List size={20}/> <span className="hidden sm:inline">名單</span></button>}</div>
                         <div className="absolute bottom-8 right-4 z-20 flex flex-col gap-3">
                             <div className="flex flex-col bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
                                 <button onClick={zoomIn} className="p-3 sm:p-2 text-slate-600 active:bg-slate-100 border-b border-slate-100"><Icons.ZoomIn size={24}/></button>
@@ -626,23 +802,37 @@
                                 <button onClick={resetView} className="p-3 sm:p-2 text-slate-600 active:bg-slate-100"><Icons.Refresh size={24}/></button>
                             </div>
                         </div>
+
+                        {/* Stats & Attribution */}
+                        <div className="absolute bottom-4 left-4 z-20 flex flex-col gap-1 pointer-events-none select-none">
+                            <div className="bg-white/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-200 shadow-sm flex gap-4 text-xs text-slate-600 font-bold">
+                                <span className="flex items-center gap-1"><Icons.Eye size={14} className="text-blue-500"/> 瀏覽: {viewCount}</span>
+                            </div>
+                        </div>
+                        <div className="absolute bottom-1 right-2 text-[10px] text-slate-300 select-none pointer-events-none z-10 text-right opacity-60">由 chenalewei62 駱駝大叔以 Gemini 輔助生產</div>
+                        
                         <svg ref={svgRef} className="w-full h-full" style={{touchAction: 'none'}} onWheel={e => setScale(s => Math.max(0.1, Math.min(5, e.deltaY > 0 ? s * 0.9 : s * 1.1)))}>
                             <g transform={`translate(${offset.x}, ${offset.y}) scale(${scale})`}>
                                 {links.map(link => {
                                     const s = nodes.find(n => n.id === link.source);
                                     const t = nodes.find(n => n.id === link.target);
                                     if (!s || !t) return null;
-                                    
                                     const typeKey = LEGACY_MAPPING[link.type] || link.type || "5";
                                     const rel = RELATIONSHIP_LEVELS[typeKey] || RELATIONSHIP_LEVELS["5"];
-                                    
-                                    return <line key={link.id} x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke={rel.color} strokeWidth={rel.width} strokeDasharray={rel.dashed} strokeOpacity={0.7} />;
+                                    return (
+                                        <g key={link.id} onClick={(e) => handleLinkClick(e, link)} className="cursor-pointer group">
+                                            {/* Transparent wider hit area */}
+                                            <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="transparent" strokeWidth="12" />
+                                            {/* Visual line */}
+                                            <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke={rel.color} strokeWidth={rel.width} strokeDasharray={rel.dashed} strokeOpacity={0.7} className="transition-all group-hover:stroke-opacity-100 group-hover:stroke-width-[+2]" />
+                                        </g>
+                                    );
                                 })}
                                 {nodes.map(node => (
                                     <g key={node.id} transform={`translate(${node.x}, ${node.y})`} onMouseDown={e => handleMouseDown(e, node)} onTouchStart={e => handleTouchStartNode(e, node)} className="transition-opacity cursor-pointer">
                                         {selectedNodeId === node.id && <circle r={node.radius + 10} fill="rgba(59, 130, 246, 0.3)" />}
                                         <circle r={node.radius} fill={PARTIES[node.party]?.color || "#999"} stroke={selectedNodeId === node.id ? "#3b82f6" : "white"} strokeWidth={selectedNodeId === node.id ? 4 : 2} className="shadow-sm" />
-                                        <text dy={node.radius + 18} textAnchor="middle" className={`text-[12px] font-bold pointer-events-none select-none ${selectedNodeId === node.id ? 'fill-blue-600 text-lg' : 'fill-slate-700'}`} style={{textShadow: '0 1px 2px white'}}>{node.name}</text>
+                                        <text dy=".3em" textAnchor="middle" fill={PARTIES[node.party]?.textColor || "#FFFFFF"} className="font-bold pointer-events-none select-none" style={{ fontSize: `${Math.max(10, node.radius / 2)}px`, textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>{node.name}</text>
                                     </g>
                                 ))}
                             </g>
