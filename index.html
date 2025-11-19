@@ -35,14 +35,7 @@
         // ==========================================
         // 重要：請在此處填入您的 Firebase Config
         // ==========================================
-        // 1. 前往 Firebase Console -> Project Settings
-        // 2. 複製您的 web app config 物件
-        // 3. 替換掉下方的空物件 {} (請保留 JSON.parse 的結構，或者直接用 const firebaseConfig = { ... };)
-        
-
-
-        // [範例] 如果您的環境變數無效，請取消註解下方並填入資料：
-        
+        // 如果您之前已經填寫過，請務必將那段 Config 複製回來這裡取代空物件
 const firebaseConfig = {
   apiKey: "AIzaSyCRaOhX4vCcsKLCFtUfFw0B1Ce2NnHF0mA",
   authDomain: "political-actor-mapping.firebaseapp.com",
@@ -52,6 +45,7 @@ const firebaseConfig = {
   appId: "1:232784260710:web:496a6da06cfe90f77007a7",
   measurementId: "G-H6B9N45HJ1"
 };
+
         // 初始化 Firebase
         if (!firebase.apps.length && firebaseConfig.apiKey) {
             try {
@@ -125,19 +119,19 @@ const firebaseConfig = {
             Refresh: (p) => <Icon {...p} d="M1 4v6h6M23 20v-6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />,
             Move: (p) => <Icon {...p} d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M9 19l3 3 3 3M2 12h20M12 2v20" />,
             Star: (p) => <Icon {...p} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
-            Alert: (p) => <Icon {...p} d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01" />
+            Alert: (p) => <Icon {...p} d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01" />,
+            // 修正: 合併兩個 path 字串到一個 d 屬性中，避免 JSX 語法錯誤
+            Edit: (p) => <Icon {...p} d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
         };
 
         function App() {
-            // --- Config Check ---
             const isConfigValid = useMemo(() => firebaseConfig && firebaseConfig.apiKey, []);
-
             const [user, setUser] = useState(null);
             const [nodes, setNodes] = useState([]);
             const [links, setLinks] = useState([]);
             const [loading, setLoading] = useState(true);
             
-            // UI State - Detect mobile on init
+            // UI State
             const isMobile = useMemo(() => window.innerWidth < 768, []);
             const [activeTab, setActiveTab] = useState('add_person');
             const [leftSidebarOpen, setLeftSidebarOpen] = useState(!isMobile);
@@ -161,20 +155,19 @@ const firebaseConfig = {
             const panRef = useRef(null);
             const hasAutoSeededRef = useRef(false);
 
+            // --- Init Auth ---
             useEffect(() => {
                 if (!isConfigValid) return;
-
                 const init = async () => {
                     try {
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await auth.signInWithCustomToken(__initial_auth_token);
                         } else {
-                            // 請確保 Firebase Console -> Authentication -> Sign-in method -> Anonymous 已啟用
                             await auth.signInAnonymously();
                         }
                     } catch (error) {
                         console.error("Auth failed", error);
-                        alert("登入失敗：請檢查 Firebase Console 是否已開啟「匿名登入 (Anonymous)」功能。\n錯誤訊息: " + error.message);
+                        alert("登入失敗: " + error.message);
                     }
                 };
                 init();
@@ -199,16 +192,12 @@ const firebaseConfig = {
                     });
                     await batch.commit();
                     console.log("Auto-seed completed");
-                } catch (err) { 
-                    console.error("Auto-seed failed", err); 
-                    alert("自動寫入範例資料失敗: " + err.message);
-                }
+                } catch (err) { console.error("Auto-seed failed", err); }
             };
 
+            // --- Listeners ---
             useEffect(() => {
                 if (!user) return;
-                
-                // Listen to Nodes
                 const unsubscribeNodes = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_nodes')
                     .onSnapshot(snapshot => {
                         if (snapshot.empty && !hasAutoSeededRef.current) { seedDatabase(); return; }
@@ -219,20 +208,38 @@ const firebaseConfig = {
                         }));
                         setLoading(false);
                         if (loadedNodes.length > 0 && !linkSource) setLinkSource(loadedNodes[0].id);
-                    }, error => {
-                        console.error("Node snapshot error", error);
-                        alert("讀取資料失敗，可能是權限不足。請檢查 Firestore Rules。\n" + error.message);
-                    });
+                    }, err => { console.error(err); alert("讀取失敗: " + err.message); });
 
-                // Listen to Links
                 const unsubscribeLinks = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links')
                     .onSnapshot(snapshot => {
                          setLinks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                    }, error => console.error("Link snapshot error", error));
+                    });
 
                 return () => { unsubscribeNodes(); unsubscribeLinks(); };
             }, [user]);
 
+            // --- Existing Link Detection & Auto-fill ---
+            // 計算目前選取的兩個人物之間是否存在連結
+            const existingLink = useMemo(() => {
+                if (!linkSource || !linkTarget || linkSource === linkTarget) return null;
+                return links.find(l => 
+                    (l.source === linkSource && l.target === linkTarget) || 
+                    (l.source === linkTarget && l.target === linkSource)
+                );
+            }, [linkSource, linkTarget, links]);
+
+            // 當偵測到既有連結時，自動將選單切換到該連結的關係類型
+            useEffect(() => {
+                if (existingLink) {
+                    setLinkType(existingLink.type);
+                } else {
+                    // 如果切換到沒有連結的組合，可以重置為預設值，或保留上次選擇，這裡選擇重置為合作以示區別
+                    // setLinkType("COOPERATIVE"); 
+                }
+            }, [existingLink]);
+
+
+            // --- Physics ---
             useEffect(() => {
                 let animationFrameId;
                 const linkCounts = {};
@@ -297,12 +304,10 @@ const firebaseConfig = {
                 return () => cancelAnimationFrame(animationFrameId);
             }, [links, nodes.length]);
 
+            // --- Actions ---
             const handleAddNode = async (e) => {
                 e.preventDefault();
-                if (!newName.trim() || !user) {
-                    if(!user) alert("尚未連線到資料庫，請檢查設定或網路");
-                    return;
-                }
+                if (!newName.trim() || !user) return;
                 if (nodes.length > 0 && !linkSource) { alert("請選擇連結對象"); return; }
                 const isDuplicate = nodes.some(n => n.name === newName.trim());
                 if (isDuplicate) { alert(`人物「${newName}」已存在！`); setActiveTab('add_link'); return; }
@@ -320,27 +325,44 @@ const firebaseConfig = {
                     }
                     setNewName(""); setLinkSource(docRef.id);
                     if (window.innerWidth < 768) setLeftSidebarOpen(false);
-                } catch (err) { 
-                    console.error(err);
-                    alert("新增失敗: " + err.message);
-                }
+                } catch (err) { console.error(err); alert("新增失敗: " + err.message); }
             };
 
-            const handleAddLink = async (e) => {
+            // Unified Handle for Create / Update Link
+            const handleSaveLink = async (e) => {
                 e.preventDefault();
                 if (!linkSource || !linkTarget || linkSource === linkTarget) { alert("請選擇兩個不同的人物"); return; }
-                const exists = links.some(l => (l.source === linkSource && l.target === linkTarget) || (l.source === linkTarget && l.target === linkSource));
-                if (exists) { alert("連結已存在"); return; }
+                
+                const linksRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links');
+
                 try {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links').add({
-                        source: linkSource, target: linkTarget, type: linkType, createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
+                    if (existingLink) {
+                        // 更新現有連結
+                        await linksRef.doc(existingLink.id).update({
+                            type: linkType,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } else {
+                        // 建立新連結
+                        await linksRef.add({
+                            source: linkSource, target: linkTarget, type: linkType, 
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
                     if (window.innerWidth < 768) setLeftSidebarOpen(false);
-                } catch (err) { console.error(err); alert("新增連結失敗: " + err.message); }
+                } catch (err) { console.error(err); alert("操作失敗: " + err.message); }
             };
 
-            const handleDelete = async (id) => {
-                if(!confirm("確定要刪除？")) return;
+            const handleDeleteLink = async () => {
+                if (!existingLink) return;
+                if (!confirm("確定要解除這段關係嗎？")) return;
+                try {
+                     await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_links').doc(existingLink.id).delete();
+                } catch (err) { console.error(err); alert("刪除失敗: " + err.message); }
+            };
+
+            const handleDeleteNode = async (id) => {
+                if(!confirm("確定要刪除此人物？相關連結也會一併移除。")) return;
                 try {
                     const batch = db.batch();
                     batch.delete(db.collection('artifacts').doc(appId).collection('public').doc('data').collection('political_nodes').doc(id));
@@ -352,7 +374,7 @@ const firebaseConfig = {
                 } catch (err) { console.error(err); alert("刪除失敗: " + err.message); }
             };
 
-            // --- Unified Interaction (Mouse & Touch) ---
+            // --- Interactions ---
             const startDragNode = (id, clientX, clientY) => {
                 draggingRef.current = { id, startX: clientX, startY: clientY, nodeX: nodes.find(n => n.id === id).x, nodeY: nodes.find(n => n.id === id).y, x: nodes.find(n => n.id === id).x, y: nodes.find(n => n.id === id).y };
                 setSelectedNodeId(id);
@@ -394,39 +416,23 @@ const firebaseConfig = {
                 const onMouseUp = () => handleUp();
                 const onTouchMove = (e) => handleMove(e.touches[0].clientX, e.touches[0].clientY);
                 const onTouchEnd = () => handleUp();
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('mouseup', onMouseUp);
-                window.addEventListener('touchmove', onTouchMove);
-                window.addEventListener('touchend', onTouchEnd);
-                return () => { 
-                    window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp);
-                    window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', onTouchEnd);
-                };
+                window.addEventListener('mousemove', onMouseMove); window.addEventListener('mouseup', onMouseUp);
+                window.addEventListener('touchmove', onTouchMove); window.addEventListener('touchend', onTouchEnd);
+                return () => { window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', onTouchEnd); };
             }, [scale, offset, nodes]);
 
             const zoomIn = () => setScale(s => Math.min(s * 1.2, 5));
             const zoomOut = () => setScale(s => Math.max(s / 1.2, 0.1));
             const resetView = () => { setScale(isMobile ? 0.6 : 1); setOffset({ x: window.innerWidth/2, y: window.innerHeight/2 }); };
-
             const sortedNodes = useMemo(() => [...nodes].sort((a,b) => a.name.localeCompare(b.name)), [nodes]);
 
-            // --- Config Check Render ---
             if (!isConfigValid) {
                 return (
                     <div className="w-full h-screen flex items-center justify-center bg-red-50 p-5">
                         <div className="max-w-md bg-white p-8 rounded-xl shadow-xl border border-red-200 text-center">
-                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Icons.Alert size={32} className="text-red-500" />
-                            </div>
+                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"><Icons.Alert size={32} className="text-red-500" /></div>
                             <h2 className="text-2xl font-bold text-red-800 mb-2">尚未設定資料庫連線</h2>
-                            <p className="text-gray-600 mb-6 text-sm leading-relaxed">
-                                您目前使用的是下載後的靜態檔案，為了讓多人協作功能運作，請使用純文字編輯器 (如 Notepad) 打開此 HTML 檔案，搜尋 
-                                <code className="bg-gray-100 px-1 py-0.5 rounded text-red-600 font-mono mx-1">const firebaseConfig</code>
-                                並填入您從 Firebase Console 取得的金鑰。
-                            </p>
-                            <div className="text-xs text-gray-400 border-t border-gray-100 pt-4">
-                                若您是在預覽環境看到此訊息，請重新整理頁面。
-                            </div>
+                            <p className="text-gray-600 mb-6 text-sm leading-relaxed">請使用文字編輯器打開此 HTML 檔案，並填入您的 <code>const firebaseConfig</code>。</p>
                         </div>
                     </div>
                 );
@@ -435,10 +441,7 @@ const firebaseConfig = {
             return (
                 <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-800">
                     {/* Left Sidebar */}
-                    <div className={`absolute z-30 left-0 top-0 h-full shadow-2xl transition-transform duration-300 flex flex-col glass-panel border-r border-slate-200 
-                        w-full sm:w-80 
-                        ${leftSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
-                    >
+                    <div className={`absolute z-30 left-0 top-0 h-full shadow-2xl transition-transform duration-300 flex flex-col glass-panel border-r border-slate-200 w-full sm:w-80 ${leftSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                         <div className="p-4 bg-slate-800 text-white flex justify-between items-center shadow-md shrink-0">
                             <h1 className="font-bold text-lg flex items-center gap-2"><Icons.Cloud size={20}/> 雲端政壇觀測</h1>
                             <div className="flex items-center gap-2">
@@ -449,17 +452,14 @@ const firebaseConfig = {
 
                         <div className="flex p-2 gap-2 bg-slate-100 border-b border-slate-200 shrink-0">
                             <button onClick={() => setActiveTab('add_person')} className={`flex-1 py-3 sm:py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${activeTab === 'add_person' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Icons.Plus size={16}/> 新增人物</button>
-                            <button onClick={() => setActiveTab('add_link')} className={`flex-1 py-3 sm:py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${activeTab === 'add_link' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Icons.Link size={16}/> 連結現有</button>
+                            <button onClick={() => setActiveTab('add_link')} className={`flex-1 py-3 sm:py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${activeTab === 'add_link' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}><Icons.Link size={16}/> 連結 / 編輯</button>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6 pb-20 sm:pb-4">
                             {activeTab === 'add_person' && (
                                 <form onSubmit={handleAddNode} className="space-y-4 fade-in">
                                     <div><label className="text-xs font-bold text-slate-400 mb-1 block">新人物姓名</label><input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="例: 王世堅" className="w-full p-3 sm:p-2 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-base sm:text-sm" /></div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-400 mb-1 block">所屬政黨</label>
-                                        <div className="grid grid-cols-2 gap-2">{Object.entries(PARTIES).map(([k, v]) => (<button type="button" key={k} onClick={() => setNewParty(k)} className={`text-xs py-2 px-2 rounded border ${newParty === k ? 'ring-2 ring-offset-1 font-bold' : 'opacity-70'}`} style={{ backgroundColor: newParty === k ? v.color : '#fff', color: newParty === k ? '#fff' : '#333', borderColor: v.color }}>{v.label}</button>))}</div>
-                                    </div>
+                                    <div><label className="text-xs font-bold text-slate-400 mb-1 block">所屬政黨</label><div className="grid grid-cols-2 gap-2">{Object.entries(PARTIES).map(([k, v]) => (<button type="button" key={k} onClick={() => setNewParty(k)} className={`text-xs py-2 px-2 rounded border ${newParty === k ? 'ring-2 ring-offset-1 font-bold' : 'opacity-70'}`} style={{ backgroundColor: newParty === k ? v.color : '#fff', color: newParty === k ? '#fff' : '#333', borderColor: v.color }}>{v.label}</button>))}</div></div>
                                     {nodes.length > 0 ? (
                                         <div className="p-3 bg-blue-50 rounded border border-blue-100">
                                             <label className="text-xs font-bold text-blue-800 mb-1 block">初始連結對象</label>
@@ -470,23 +470,45 @@ const firebaseConfig = {
                                     <button type="submit" disabled={!newName.trim() || (nodes.length > 0 && !linkSource)} className="w-full py-3 bg-blue-600 text-white rounded shadow hover:bg-blue-700 disabled:opacity-50 font-bold text-base">{nodes.length === 0 ? "建立起點" : "加入網絡"}</button>
                                 </form>
                             )}
+
+                            {/* 連結 / 編輯 頁籤 */}
                             {activeTab === 'add_link' && (
-                                <form onSubmit={handleAddLink} className="space-y-4 fade-in">
+                                <form onSubmit={handleSaveLink} className="space-y-4 fade-in">
                                     {nodes.length < 2 ? <div className="p-4 text-center text-slate-400 text-xs">需至少兩位人物</div> : (
-                                        <div className="p-4 bg-purple-50 rounded border border-purple-100 space-y-3">
-                                            <div><label className="text-xs font-bold text-purple-800 mb-1 block">人物 A</label><select value={linkSource} onChange={e => setLinkSource(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-purple-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkTarget}>{n.name}</option>)}</select></div>
-                                            <div><label className="text-xs font-bold text-purple-800 mb-1 block">人物 B</label><select value={linkTarget} onChange={e => setLinkTarget(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-purple-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkSource}>{n.name}</option>)}</select></div>
-                                            <div><label className="text-xs font-bold text-purple-800 mb-1 block">關係性質</label><div className="flex gap-1">{Object.values(RELATIONSHIPS).map(r => (<button type="button" key={r.id} onClick={() => setLinkType(r.id)} className={`flex-1 py-2 text-[10px] rounded border ${linkType === r.id ? 'text-white' : 'bg-white'}`} style={{ backgroundColor: linkType === r.id ? r.color : '#fff', borderColor: r.color, color: linkType === r.id ? '#fff' : r.color }}>{r.label}</button>))}</div></div>
+                                        <div className={`p-4 rounded border space-y-3 transition-colors ${existingLink ? 'bg-amber-50 border-amber-200' : 'bg-purple-50 border-purple-100'}`}>
+                                            {existingLink && (
+                                                <div className="text-xs font-bold text-amber-600 flex items-center gap-2 mb-2 border-b border-amber-200 pb-2">
+                                                    <Icons.Edit size={14} /> 編輯現有關係
+                                                </div>
+                                            )}
+                                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">人物 A</label><select value={linkSource} onChange={e => setLinkSource(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-slate-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkTarget}>{n.name}</option>)}</select></div>
+                                            <div><label className="text-xs font-bold text-slate-500 mb-1 block">人物 B</label><select value={linkTarget} onChange={e => setLinkTarget(e.target.value)} className="w-full p-3 sm:p-2 rounded border border-slate-200 text-base sm:text-sm"><option value="">-- 選擇 --</option>{sortedNodes.map(n => <option key={n.id} value={n.id} disabled={n.id === linkSource}>{n.name}</option>)}</select></div>
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-500 mb-1 block">關係性質</label>
+                                                <div className="flex gap-1">{Object.values(RELATIONSHIPS).map(r => (<button type="button" key={r.id} onClick={() => setLinkType(r.id)} className={`flex-1 py-2 text-[10px] rounded border ${linkType === r.id ? 'text-white' : 'bg-white'}`} style={{ backgroundColor: linkType === r.id ? r.color : '#fff', borderColor: r.color, color: linkType === r.id ? '#fff' : r.color }}>{r.label}</button>))}</div>
+                                            </div>
                                         </div>
                                     )}
-                                    <button type="submit" disabled={!linkSource || !linkTarget} className="w-full py-3 bg-purple-600 text-white rounded shadow hover:bg-purple-700 disabled:opacity-50 font-bold text-base">建立連結</button>
+                                    
+                                    <div className="flex gap-2">
+                                        {existingLink && (
+                                            <button type="button" onClick={handleDeleteLink} className="flex-1 py-3 bg-red-100 text-red-600 hover:bg-red-200 rounded shadow font-bold text-base flex items-center justify-center gap-1">
+                                                <Icons.Trash size={18}/> 刪除
+                                            </button>
+                                        )}
+                                        <button type="submit" disabled={!linkSource || !linkTarget} 
+                                            className={`flex-[2] py-3 text-white rounded shadow font-bold text-base disabled:opacity-50 ${existingLink ? 'bg-amber-500 hover:bg-amber-600' : 'bg-purple-600 hover:bg-purple-700'}`}>
+                                            {existingLink ? "更新關係" : "建立連結"}
+                                        </button>
+                                    </div>
                                 </form>
                             )}
+
                             {selectedNodeId && nodes.find(n => n.id === selectedNodeId) && (
                                 <div className="border-t pt-4 mt-4 pb-20 sm:pb-0">
                                     <div className="flex justify-between items-center mb-2">
                                         <h3 className="font-bold text-sm text-slate-600">選取資訊</h3>
-                                        <button onClick={() => handleDelete(selectedNodeId)} className="text-red-500 p-2 bg-red-50 rounded-full hover:bg-red-100"><Icons.Trash size={20}/></button>
+                                        <button onClick={() => handleDeleteNode(selectedNodeId)} className="text-red-500 p-2 bg-red-50 rounded-full hover:bg-red-100"><Icons.Trash size={20}/></button>
                                     </div>
                                     <div className="p-4 bg-white rounded border shadow-sm">
                                         <div className="text-xl font-bold mb-1">{nodes.find(n => n.id === selectedNodeId).name}</div>
@@ -497,18 +519,10 @@ const firebaseConfig = {
                         </div>
                     </div>
 
-                    {!leftSidebarOpen && (
-                        <button onClick={() => { setLeftSidebarOpen(true); setRightSidebarOpen(false); }} 
-                                className="absolute top-4 left-4 z-20 bg-white p-3 rounded shadow-lg border border-slate-100 active:bg-slate-100">
-                            <Icons.Menu size={24} />
-                        </button>
-                    )}
+                    {!leftSidebarOpen && <button onClick={() => { setLeftSidebarOpen(true); setRightSidebarOpen(false); }} className="absolute top-4 left-4 z-20 bg-white p-3 rounded shadow-lg border border-slate-100 active:bg-slate-100"><Icons.Menu size={24} /></button>}
 
                     {/* Right Sidebar */}
-                    <div className={`absolute z-30 right-0 top-0 h-full shadow-xl transition-transform duration-300 flex flex-col glass-panel border-l border-slate-200 
-                        w-full sm:w-64 
-                        ${rightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
-                    >
+                    <div className={`absolute z-30 right-0 top-0 h-full shadow-xl transition-transform duration-300 flex flex-col glass-panel border-l border-slate-200 w-full sm:w-64 ${rightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                         <div className="p-3 bg-slate-800 text-white flex justify-between items-center shadow-sm shrink-0">
                             <h2 className="font-bold text-sm flex items-center gap-2"><Icons.List size={16}/> 人物名單 ({nodes.length})</h2>
                             <button onClick={() => setRightSidebarOpen(false)} className="hover:bg-slate-700 p-2 rounded"><Icons.X size={24}/></button>
@@ -528,20 +542,12 @@ const firebaseConfig = {
                         </div>
                     </div>
 
-                    {/* Main Graph Area */}
-                    <div className={`flex-1 relative overflow-hidden bg-slate-50 transition-all duration-300 
-                        ${!isMobile && rightSidebarOpen ? 'mr-64' : 'mr-0'} 
-                        ${!isMobile && leftSidebarOpen ? 'ml-80' : 'ml-0'} 
-                        ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`} 
-                         onMouseDown={handleCanvasMouseDown}
-                         onTouchStart={handleCanvasTouchStart}
-                    >
+                    {/* Main Graph */}
+                    <div className={`flex-1 relative overflow-hidden bg-slate-50 transition-all duration-300 ${!isMobile && rightSidebarOpen ? 'mr-64' : 'mr-0'} ${!isMobile && leftSidebarOpen ? 'ml-80' : 'ml-0'} ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`} onMouseDown={handleCanvasMouseDown} onTouchStart={handleCanvasTouchStart}>
                         <div className="absolute bottom-4 left-4 text-xs text-slate-400 pointer-events-none select-none z-10 hidden sm:block">{loading ? "Loading..." : `Live Sync • ${nodes.length} Nodes`}</div>
-                        
                         <div className="absolute top-4 right-4 z-20 flex gap-2">
                              {!rightSidebarOpen && <button onClick={() => { setRightSidebarOpen(true); setLeftSidebarOpen(false); }} className="bg-white p-3 rounded shadow-lg text-slate-600 active:bg-slate-100 flex items-center gap-1 text-xs font-bold"><Icons.List size={20}/> <span className="hidden sm:inline">名單</span></button>}
                         </div>
-
                         <div className="absolute bottom-8 right-4 z-20 flex flex-col gap-3">
                             <div className="flex flex-col bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
                                 <button onClick={zoomIn} className="p-3 sm:p-2 text-slate-600 active:bg-slate-100 border-b border-slate-100"><Icons.ZoomIn size={24}/></button>
@@ -549,7 +555,6 @@ const firebaseConfig = {
                                 <button onClick={resetView} className="p-3 sm:p-2 text-slate-600 active:bg-slate-100"><Icons.Refresh size={24}/></button>
                             </div>
                         </div>
-
                         <svg ref={svgRef} className="w-full h-full" style={{touchAction: 'none'}} onWheel={e => setScale(s => Math.max(0.1, Math.min(5, e.deltaY > 0 ? s * 0.9 : s * 1.1)))}>
                             <g transform={`translate(${offset.x}, ${offset.y}) scale(${scale})`}>
                                 {links.map(link => {
@@ -560,11 +565,7 @@ const firebaseConfig = {
                                     return <line key={link.id} x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke={rel.color} strokeWidth={rel.width} strokeDasharray={rel.dashed} strokeOpacity={0.6} />;
                                 })}
                                 {nodes.map(node => (
-                                    <g key={node.id} transform={`translate(${node.x}, ${node.y})`} 
-                                       onMouseDown={e => handleMouseDown(e, node)} 
-                                       onTouchStart={e => handleTouchStartNode(e, node)}
-                                       className="transition-opacity cursor-pointer"
-                                    >
+                                    <g key={node.id} transform={`translate(${node.x}, ${node.y})`} onMouseDown={e => handleMouseDown(e, node)} onTouchStart={e => handleTouchStartNode(e, node)} className="transition-opacity cursor-pointer">
                                         {selectedNodeId === node.id && <circle r={node.radius + 10} fill="rgba(59, 130, 246, 0.3)" />}
                                         <circle r={node.radius} fill={PARTIES[node.party]?.color || "#999"} stroke={selectedNodeId === node.id ? "#3b82f6" : "white"} strokeWidth={selectedNodeId === node.id ? 4 : 2} className="shadow-sm" />
                                         <text dy={node.radius + 18} textAnchor="middle" className={`text-[12px] font-bold pointer-events-none select-none ${selectedNodeId === node.id ? 'fill-blue-600 text-lg' : 'fill-slate-700'}`} style={{textShadow: '0 1px 2px white'}}>{node.name}</text>
